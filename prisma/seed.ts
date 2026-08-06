@@ -22,6 +22,24 @@ function d(iso: string): Date {
 }
 
 async function main() {
+  // This script DESTROYS all existing data. That was harmless when the only
+  // database was a local dev.db, but the app is now deployed and someone may
+  // have entered real records. Refuse to run against a database that already
+  // has data unless the caller explicitly opts in with FORCE_SEED=1.
+  const existing = await db.customer.count()
+
+  if (existing > 0 && process.env.FORCE_SEED !== '1') {
+    console.error(
+      `\nRefusing to seed: the target database already has ${existing} customer(s).\n` +
+        `Seeding deletes EVERY record — customers, equipment, operators, documents,\n` +
+        `contracts and invoices.\n\n` +
+        `Check DATABASE_URL points where you think it does. If you really do want\n` +
+        `to wipe it, re-run with FORCE_SEED=1.\n`,
+    )
+    process.exitCode = 1
+    return
+  }
+
   // Wipe in dependency order so the seed can be re-run at any time.
   await db.invoiceLineItem.deleteMany()
   await db.invoice.deleteMany()

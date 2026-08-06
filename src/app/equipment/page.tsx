@@ -17,10 +17,11 @@ export default async function EquipmentPage({
     where: query
       ? {
           OR: [
-            { name: { contains: query } },
-            { type: { contains: query } },
-            { serialNumber: { contains: query } },
-            { plateNumber: { contains: query } },
+            // Postgres LIKE is case-sensitive — see customers/page.tsx
+            { name: { contains: query, mode: 'insensitive' } },
+            { type: { contains: query, mode: 'insensitive' } },
+            { serialNumber: { contains: query, mode: 'insensitive' } },
+            { plateNumber: { contains: query, mode: 'insensitive' } },
           ],
         }
       : undefined,

@@ -2,19 +2,43 @@
 
 Decisions a future maintainer would otherwise have to re-derive. Kept short.
 
-## SQLite forces two things
+## Enums are strings, approvedFor is a join table
 
-Prisma does not support `enum` or scalar list fields on SQLite.
+Both started as SQLite limitations (Prisma supports neither `enum` nor scalar
+lists there). We are on Postgres now and both are being kept deliberately.
 
 1. **Enums are strings.** Every enum in the spec is a `String` column. The
    source of truth is `src/lib/enums.ts` (value tuples + TS union types), and
    `src/lib/validation.ts` enforces them at runtime with zod. Nothing writes to
-   the database without going through a zod schema — on SQLite that validation
-   is the only thing preventing bad values.
+   the database without going through a zod schema. Converting to native
+   Postgres enums is a typed refactor across every read, write and zod schema
+   for no behavioural gain, so it has not been done.
 2. **`Document.approvedFor` is a join table** (`DocumentApproval`) rather than
-   an array column.
+   an array column — the better model regardless of provider.
 
-On the move to Postgres the strings become real enums; the join table stays.
+## We moved off SQLite to deploy
+
+SQLite cannot back a serverless deployment: the filesystem is ephemeral, so the
+database file is wiped on every deploy and is not shared between instances.
+Postgres (Neon) replaced it when the app first went live.
+
+Two things bit during that move, both worth remembering:
+
+- **`contains` is case-sensitive on Postgres.** SQLite's `LIKE` is not, so all
+  eleven search filters silently half-broke — "diar" stopped matching "Qatari
+  Diar". Every one now passes `mode: 'insensitive'`. Any new search filter
+  needs it too.
+- **The migration had to be regenerated.** The original migration was SQLite
+  DDL and will not run on Postgres. `prisma/migrations/` was rebuilt from the
+  schema with `prisma migrate diff --from-empty --to-schema`.
+
+## Seeding refuses to run over existing data
+
+`prisma/seed.ts` deletes every record before inserting. That was harmless when
+the only database was a local `dev.db`, but it is now pointed at a shared
+database that people are entering real data into. It aborts if the target
+already has customers; `FORCE_SEED=1` overrides. Do not remove that guard, and
+do not put the seed in the build command.
 
 ## Documents are polymorphic via three FKs, not (ownerType, ownerId)
 

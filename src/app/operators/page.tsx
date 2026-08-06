@@ -18,9 +18,10 @@ export default async function OperatorsPage({
     where: query
       ? {
           OR: [
-            { name: { contains: query } },
-            { phone: { contains: query } },
-            { nationality: { contains: query } },
+            // Postgres LIKE is case-sensitive — see customers/page.tsx
+            { name: { contains: query, mode: 'insensitive' } },
+            { phone: { contains: query, mode: 'insensitive' } },
+            { nationality: { contains: query, mode: 'insensitive' } },
           ],
         }
       : undefined,

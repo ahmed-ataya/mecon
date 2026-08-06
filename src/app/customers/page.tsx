@@ -17,10 +17,13 @@ export default async function CustomersPage({
     where: query
       ? {
           OR: [
-            { name: { contains: query } },
-            { contactPerson: { contains: query } },
-            { phone: { contains: query } },
-            { email: { contains: query } },
+            // mode: 'insensitive' is required on Postgres — its LIKE is
+            // case-sensitive, unlike SQLite's. Without it "diar" stops
+            // matching "Qatari Diar".
+            { name: { contains: query, mode: 'insensitive' } },
+            { contactPerson: { contains: query, mode: 'insensitive' } },
+            { phone: { contains: query, mode: 'insensitive' } },
+            { email: { contains: query, mode: 'insensitive' } },
           ],
         }
       : undefined,

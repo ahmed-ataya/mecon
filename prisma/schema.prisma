@@ -1,19 +1,21 @@
 // Mecon — heavy equipment rental & contracting operations system
 //
-// IMPORTANT — two deliberate deviations from the spec, forced by SQLite. See
-// NOTES.md for the full reasoning. Short version:
+// IMPORTANT — two deliberate deviations from the spec. Both originated as
+// SQLite limitations; see NOTES.md for the full reasoning. Short version:
 //
-//  1. SQLite does not support Prisma `enum`. Every enum in the spec is a String
-//     here. The single source of truth for allowed values is src/lib/enums.ts
-//     (TypeScript union types + zod schemas). Allowed values are listed in a
-//     comment above each field so the schema stays self-documenting.
+//  1. Every enum in the spec is a String here. The single source of truth for
+//     allowed values is src/lib/enums.ts (TypeScript union types + zod
+//     schemas). Allowed values are listed in a comment above each field so the
+//     schema stays self-documenting.
 //
-//  2. SQLite does not support scalar list fields, so Document.approvedFor is a
-//     real join table (DocumentApproval) rather than an array column. The spec
-//     allowed for this ("array/join table").
+//  2. Document.approvedFor is a real join table (DocumentApproval) rather than
+//     an array column. The spec allowed for this ("array/join table").
 //
-// When we move to Postgres in a later phase, the String fields become real
-// enums and the join table stays as-is.
+// We are now on Postgres, which supports native enums and arrays — but both
+// choices are being kept. The String enums stay because converting them is a
+// typed refactor across every read, write and zod schema, with no behavioural
+// gain: src/lib/enums.ts already enforces the same values. The join table
+// stays because it is the better model regardless of provider.
 
 generator client {
   provider = "prisma-client-js"
@@ -23,7 +25,7 @@ generator client {
 // prisma.config.ts for migrations, and is passed to the driver adapter at
 // runtime in src/lib/db.ts.
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 // ---------------------------------------------------------------------------

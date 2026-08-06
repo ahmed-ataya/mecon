@@ -1,9 +1,11 @@
 import { PrismaClient } from '@prisma/client'
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
+import { PrismaPg } from '@prisma/adapter-pg'
 
 // Prisma 7 connects through a driver adapter rather than a url in the schema.
-// timestampFormat 'iso8601' stores DateTime columns as readable ISO strings,
-// per the project convention — you can open dev.db and read the dates.
+//
+// Postgres, not SQLite: the app is deployed on serverless, where the
+// filesystem is ephemeral and a SQLite file would be wiped on every deploy
+// (and not shared between instances). See NOTES.md.
 function createClient() {
   const url = process.env.DATABASE_URL
 
@@ -12,10 +14,7 @@ function createClient() {
   }
 
   return new PrismaClient({
-    adapter: new PrismaBetterSqlite3(
-      { url: url.replace(/^file:/, '') },
-      { timestampFormat: 'iso8601' },
-    ),
+    adapter: new PrismaPg({ connectionString: url }),
   })
 }
 
