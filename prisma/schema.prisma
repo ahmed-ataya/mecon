@@ -1,0 +1,345 @@
+// Mecon — heavy equipment rental & contracting operations system
+//
+// IMPORTANT — two deliberate deviations from the spec, forced by SQLite. See
+// NOTES.md for the full reasoning. Short version:
+//
+//  1. SQLite does not support Prisma `enum`. Every enum in the spec is a String
+//     here. The single source of truth for allowed values is src/lib/enums.ts
+//     (TypeScript union types + zod schemas). Allowed values are listed in a
+//     comment above each field so the schema stays self-documenting.
+//
+//  2. SQLite does not support scalar list fields, so Document.approvedFor is a
+//     real join table (DocumentApproval) rather than an array column. The spec
+//     allowed for this ("array/join table").
+//
+// When we move to Postgres in a later phase, the String fields become real
+// enums and the join table stays as-is.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Prisma 7 no longer accepts `url` here — the connection string lives in
+// prisma.config.ts for migrations, and is passed to the driver adapter at
+// runtime in src/lib/db.ts.
+datasource db {
+  provider = "sqlite"
+}
+
+// ---------------------------------------------------------------------------
+// Parties and assets
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id            String  @id @default(cuid())
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  notes         String?
+
+  documents Document[]
+  contracts Contract[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
+model Equipment {
+  /// Unit label as used on the yard, e.g. "CAT 320 #4"
+  id   String @id @default(cuid())
+  name String
+
+  /// Excavator | Wheel Loader | Backhoe Loader (JCB) | Skid Steer (Bobcat)
+  /// | Bulldozer | Crane | Dump Truck | Roller/Compactor | Forklift | Other
+  type String
+
+  serialNumber String?
+  plateNumber  String?
+  notes        String?
+
+  documents   Document[]
+  assignments EquipmentAssignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([type])
+}
+
+model Operator {
+  id          String  @id @default(cuid())
+  name        String
+  phone       String?
+  nationality String?
+
+  /// IN_HOUSE | MARKET
+  source String @default("IN_HOUSE")
+
+  notes String?
+
+  documents   Document[]
+  assignments OperatorAssignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
+// ---------------------------------------------------------------------------
+// Documents
+// ---------------------------------------------------------------------------
+
+/// Polymorphic by intent, but modelled with three nullable foreign keys rather
+/// than a bare (ownerType, ownerId) pair. Reason: Prisma cannot express a
+/// relation over an untyped ownerId, so `customer.documents` — which the spec
+/// asks for on all three owners — would be impossible to query or include.
+/// `ownerType` is kept as an explicit discriminator so the mental model from
+/// the spec survives, and the app layer enforces "exactly one owner FK set".
+model Document {
+  id String @id @default(cuid())
+
+  /// CUSTOMER | EQUIPMENT | OPERATOR — must agree with whichever FK is set
+  ownerType String
+
+  customerId  String?
+  customer    Customer?  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  equipmentId String?
+  equipment   Equipment? @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  operatorId  String?
+  operator    Operator?  @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+
+  /// Allowed values depend on ownerType — validated in src/lib/enums.ts
+  ///   Customer:  Trade License | Commercial Registration | VAT Certificate
+  ///              | Company ID / CR Extract | Insurance Certificate | Other
+  ///   Equipment: Registration (Istimara) | Insurance | 3rd Party Certificate
+  ///              | Load Test Certificate | Inspection Report | Other
+  ///   Operator:  Qatar ID | Driving License | Operator License
+  ///              | Medical Certificate | 3rd Party Certificate | Passport | Other
+  documentType String
+
+  documentNumber String?
+  issueDate      DateTime?
+  expiryDate     DateTime?
+
+  /// False records a deliberate "this does not apply to this machine", so a
+  /// blank is never ambiguous between "missing" and "not required".
+  isApplicable Boolean @default(true)
+
+  /// Relative path under storage/ — populated in phase 4
+  filePath String?
+
+  // --- 3rd Party Certificate only -----------------------------------------
+
+  /// Lifting Equipment Cert | Load Test | Operator Competency
+  /// | Vehicle Inspection | Pressure Vessel | Other
+  thirdPartyType String?
+
+  /// The certifying body, e.g. Bureau Veritas, SGS, TÜV
+  issuingCompany String?
+
+  /// Which site approval regimes this certificate is accepted under
+  approvedFor DocumentApproval[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([equipmentId])
+  @@index([operatorId])
+  @@index([expiryDate])
+}
+
+/// Join table standing in for Document.approvedFor[]
+model DocumentApproval {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  /// GENERAL_DOHA | QATAR_ENERGY | RAS_LAFFAN | MESAIEED | OTHER
+  body String
+
+  @@unique([documentId, body])
+  @@index([documentId])
+}
+
+// ---------------------------------------------------------------------------
+// Contracts
+// ---------------------------------------------------------------------------
+
+/// A contract belongs to a PROJECT, never to a machine. mobilizationDate is
+/// fixed for the life of the contract. Equipment and operators come and go
+/// underneath it via assignments, so billing stays continuous across swaps.
+model Contract {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  projectName String
+
+  /// DOHA_GENERAL | QATAR_ENERGY | RAS_LAFFAN | MESAIEED | OTHER
+  /// Drives which 3rd party certificates are acceptable.
+  site String
+
+  /// Fixed. Belongs to the project — never edited on equipment/operator swap.
+  mobilizationDate DateTime
+
+  /// Null means ongoing
+  closingDate DateTime?
+
+  /// PER_DAY | PER_MONTH | PER_WORKING_HOUR
+  rateType String
+
+  /// Integer HALALAS (1 riyal = 100 halalas) — see src/lib/money.ts.
+  /// Rates carry decimals (137.50/hr is normal), so riyals is too coarse.
+  rateAmount Int
+
+  lpoNumber   String?
+  lpoValidity DateTime?
+  /// Integer halalas
+  lpoAmount   Int?
+
+  // status is NOT stored — derived from mobilizationDate / closingDate so it
+  // can never go stale. See src/lib/contract-status.ts
+
+  equipmentAssignments EquipmentAssignment[]
+  operatorAssignments  OperatorAssignment[]
+  invoices             Invoice[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([site])
+  @@index([mobilizationDate])
+}
+
+/// Never overwritten on replacement. To swap a machine: set endDate on the
+/// current row to the day before, then insert a new row.
+model EquipmentAssignment {
+  id          String    @id @default(cuid())
+  contractId  String
+  contract    Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id])
+
+  startDate DateTime
+  /// Null means currently assigned
+  endDate   DateTime?
+
+  /// INITIAL | BREAKDOWN_REPLACEMENT | CUSTOMER_REQUEST | SCHEDULED_SWAP | OTHER
+  reason String @default("INITIAL")
+  note   String?
+
+  invoiceLineItems InvoiceLineItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([contractId])
+  @@index([equipmentId])
+}
+
+/// Same replacement rule as EquipmentAssignment. operatorId is null when the
+/// arrangement is WITHOUT_OPERATOR.
+model OperatorAssignment {
+  id         String    @id @default(cuid())
+  contractId String
+  contract   Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  operatorId String?
+  operator   Operator? @relation(fields: [operatorId], references: [id])
+
+  /// WITH_OPERATOR | WITHOUT_OPERATOR | MARKET_OPERATOR
+  arrangement String
+
+  startDate DateTime
+  /// Null means currently assigned
+  endDate   DateTime?
+
+  /// INITIAL | SICK_INJURED | BREAKDOWN_REPLACEMENT | CUSTOMER_REQUEST
+  /// | SCHEDULED_SWAP | OTHER
+  reason String @default("INITIAL")
+
+  /// What we pay a subcontracted market operator, in integer halalas
+  operatorCost   Int?
+  /// What we charge the customer for that operator, in integer halalas.
+  /// Both are stored so margin stays visible.
+  operatorRebill Int?
+
+  note String?
+
+  invoiceLineItems InvoiceLineItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([contractId])
+  @@index([operatorId])
+}
+
+// ---------------------------------------------------------------------------
+// Billing (phase 3 — modelled now so the schema is complete)
+// ---------------------------------------------------------------------------
+
+model Invoice {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  invoiceNumber String @unique
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  lineItems InvoiceLineItem[]
+
+  /// Integer halalas
+  totalAmount Int
+  issuedDate  DateTime?
+  dueDate     DateTime?
+
+  /// Lifecycle only: DRAFT | ISSUED | PAID.
+  /// OVERDUE is NOT stored — it is derived (ISSUED && dueDate < today &&
+  /// paidDate == null) so it cannot go stale. See src/lib/invoice-status.ts
+  status String @default("DRAFT")
+
+  paidDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([contractId])
+  @@index([status])
+}
+
+/// One line per assignment slice, so an invoice covering a machine swap shows
+/// each machine's actual days separately.
+model InvoiceLineItem {
+  id        String  @id @default(cuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  /// EQUIPMENT | OPERATOR_REBILL | OTHER
+  kind String
+
+  description String
+
+  /// Traceability back to the assignment history this line was derived from
+  equipmentAssignmentId String?
+  equipmentAssignment   EquipmentAssignment? @relation(fields: [equipmentAssignmentId], references: [id])
+  operatorAssignmentId  String?
+  operatorAssignment    OperatorAssignment?  @relation(fields: [operatorAssignmentId], references: [id])
+
+  /// Days, months or working hours depending on the contract rateType
+  quantity Float
+  /// Integer halalas
+  unitRate Int
+  /// Integer halalas
+  amount   Int
+
+  @@index([invoiceId])
+}
