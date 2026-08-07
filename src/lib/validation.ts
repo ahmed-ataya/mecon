@@ -195,7 +195,10 @@ export const contractSchema = z
   .object({
     customerId: z.string().trim().min(1, 'Select a customer'),
     projectName: z.string().trim().min(1, 'Project name is required'),
-    site: z.enum(SITES, { message: 'Select a site' }),
+    // Free text, so nothing is lost when the place is not on any list.
+    siteName: z.string().trim().min(1, 'Location is required'),
+    // The certification regime, recorded separately from the name.
+    siteRegime: z.enum(SITES, { message: 'Select which approval applies' }),
     mobilizationDate: requiredDate('Mobilization date'),
     closingDate: optionalDate,
     lpoNumber: optionalText,
@@ -232,6 +235,8 @@ export const operatorAssignmentSchema = z
   .object({
     arrangement: z.enum(ARRANGEMENTS, { message: 'Select an arrangement' }),
     operatorId: optionalText,
+    /** Which machine this operator runs — optional, contracts vary. */
+    equipmentId: optionalText,
     startDate: requiredDate('Start date'),
     reason: z.enum(OPERATOR_ASSIGNMENT_REASONS, { message: 'Select a reason' }),
     operatorCost: moneyField('Operator cost'),

@@ -1,6 +1,6 @@
 import { db } from './db'
 import { rollUpStatus, type DocumentStatus } from './document-status'
-import { SITES, type Site } from './enums'
+import { SITES, SITE_LABELS, type Site } from './enums'
 import { documentWarnings, siteApprovalWarning, type Warning } from './warnings'
 
 /**
@@ -70,6 +70,45 @@ export async function loadEquipmentOptions(): Promise<EquipmentOption[]> {
       siteWarnings,
     }
   })
+}
+
+export type LocationOption = {
+  value: string
+  label: string
+  sublabel?: string
+  /** The regime this location was last recorded under, used to autofill. */
+  regime: string
+}
+
+/**
+ * Locations already used, most recent first.
+ *
+ * There is no locations table — the list is derived from the contracts
+ * themselves, so it grows as jobs are recorded and never needs maintaining.
+ * The regime comes from the most recent contract at that location, which is
+ * what the form autofills when a known location is picked.
+ */
+export async function loadLocationOptions(): Promise<LocationOption[]> {
+  const contracts = await db.contract.findMany({
+    select: { siteName: true, siteRegime: true, mobilizationDate: true },
+    orderBy: { mobilizationDate: 'desc' },
+  })
+
+  const seen = new Map<string, LocationOption>()
+
+  for (const contract of contracts) {
+    const key = contract.siteName.trim().toLowerCase()
+    if (!key || seen.has(key)) continue
+
+    seen.set(key, {
+      value: contract.siteName,
+      label: contract.siteName,
+      sublabel: SITE_LABELS[contract.siteRegime as Site] ?? contract.siteRegime,
+      regime: contract.siteRegime,
+    })
+  }
+
+  return [...seen.values()]
 }
 
 export async function loadOperatorOptions(): Promise<PartyOption[]> {

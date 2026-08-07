@@ -35,6 +35,7 @@ export function Combobox({
   placeholder = 'Search…',
   emptyLabel = 'No matches',
   disabled = false,
+  allowCustom = false,
   onSelect,
 }: {
   name: string
@@ -43,6 +44,12 @@ export function Combobox({
   placeholder?: string
   emptyLabel?: string
   disabled?: boolean
+  /**
+   * Keep whatever is typed, even when it matches nothing. Used for locations:
+   * a fixed list collapsed every unlisted site to "Other" and lost the real
+   * name, so the list suggests without constraining.
+   */
+  allowCustom?: boolean
   onSelect?: (value: string) => void
 }) {
   const [selected, setSelected] = useState(defaultValue)
@@ -57,7 +64,10 @@ export function Combobox({
   const selectedOption = options.find((option) => option.value === selected)
 
   // Once something is chosen, show its label rather than the search text.
-  const inputValue = open ? query : (selectedOption?.label ?? '')
+  // With allowCustom the typed text IS the value, so fall back to it.
+  const inputValue = open
+    ? query
+    : (selectedOption?.label ?? (allowCustom ? selected : ''))
 
   const filtered = open
     ? options.filter((option) =>
@@ -91,6 +101,13 @@ export function Combobox({
     onSelect?.(option.value)
   }
 
+  /** Free-typed text becomes the value as-is, with nothing selected from the list. */
+  function acceptTyped(text: string) {
+    const trimmed = text.trim()
+    setSelected(trimmed)
+    onSelect?.(trimmed)
+  }
+
   function onKeyDown(event: React.KeyboardEvent) {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
@@ -111,7 +128,12 @@ export function Combobox({
     if (event.key === 'Enter' && open) {
       event.preventDefault() // do not submit the form while picking
       const option = filtered[highlighted]
-      if (option) choose(option)
+      if (option) {
+        choose(option)
+      } else if (allowCustom && query.trim()) {
+        acceptTyped(query)
+        setOpen(false)
+      }
       return
     }
 
@@ -140,6 +162,12 @@ export function Combobox({
           setQuery(event.target.value)
           setHighlighted(0)
           if (!open) setOpen(true)
+          if (allowCustom) acceptTyped(event.target.value)
+        }}
+        onBlur={() => {
+          // Committing on blur means a typed location is kept even if the
+          // user never touches the suggestion list.
+          if (allowCustom && query.trim()) acceptTyped(query)
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
@@ -153,7 +181,11 @@ export function Combobox({
           className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg"
         >
           {filtered.length === 0 ? (
-            <li className="px-3 py-2 text-sm text-slate-500">{emptyLabel}</li>
+            <li className="px-3 py-2 text-sm text-slate-500">
+              {allowCustom && query.trim()
+                ? `Use “${query.trim()}” — new entry, saved with this contract`
+                : emptyLabel}
+            </li>
           ) : (
             filtered.map((option, index) => (
               <li key={option.value}>

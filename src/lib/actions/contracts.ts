@@ -27,14 +27,46 @@ function readForm(formData: FormData): Record<string, string> {
   return values
 }
 
+/**
+ * Repeatable form rows read back as parallel arrays.
+ *
+ * Every row must render every field — hidden ones included — or the indexes
+ * stop lining up and rows silently take each other's values.
+ */
+function readRows(
+  formData: FormData,
+  prefix: string,
+  fields: string[],
+): Record<string, string>[] {
+  const columns = fields.map((field) =>
+    formData.getAll(`${prefix}${field}`).map((value) => String(value)),
+  )
+  const rowCount = Math.max(0, ...columns.map((column) => column.length))
+
+  const rows: Record<string, string>[] = []
+  for (let index = 0; index < rowCount; index++) {
+    const row: Record<string, string> = {}
+    fields.forEach((field, column) => {
+      row[field] = columns[column][index] ?? ''
+    })
+    rows.push(row)
+  }
+
+  return rows
+}
+
 // ---------------------------------------------------------------------------
 // Contract
 // ---------------------------------------------------------------------------
 
 /**
- * Creates the contract together with its first equipment assignment and its
- * operator arrangement, in one transaction — a contract with no machine on it
- * is not a useful record, and a half-created one is worse.
+ * Creates the contract together with EVERY machine and operator entered on the
+ * form, in one transaction.
+ *
+ * Repeatable rows arrive as parallel arrays (m_* for machines, o_* for
+ * operators) — every row renders every field, including hidden ones, so the
+ * indexes line up. A contract with nothing on it is not a useful record, and a
+ * half-created one is worse.
  */
 export async function createContract(
   _prev: ActionState,
@@ -43,52 +75,95 @@ export async function createContract(
   const values = readForm(formData)
 
   const contract = contractSchema.safeParse(values)
-  const equipment = equipmentAssignmentSchema.safeParse(values)
-  const operator = operatorAssignmentSchema.safeParse({
-    ...values,
-    // The initial assignments both start when the contract mobilizes.
-    startDate: values.mobilizationDate ?? '',
-    reason: 'INITIAL',
+
+  const machineRows = readRows(formData, 'm_', [
+    'equipmentId',
+    'rateType',
+    'rateAmount',
+    'note',
+  ])
+  const operatorRows = readRows(formData, 'o_', [
+    'arrangement',
+    'operatorId',
+    'equipmentId',
+    'operatorCost',
+    'operatorRebill',
+    'note',
+  ])
+
+  const errors: Record<string, string> = contract.success
+    ? {}
+    : fieldErrors(contract.error)
+
+  if (machineRows.length === 0) {
+    errors.m_equipmentId = 'Add at least one machine'
+  }
+
+  // Assignments start on the mobilization date — the project's own date.
+  const startDate = values.mobilizationDate ?? ''
+
+  const machines = machineRows.map((row, index) => {
+    const parsed = equipmentAssignmentSchema.safeParse({
+      ...row,
+      startDate,
+      reason: 'INITIAL',
+    })
+    if (!parsed.success) {
+      for (const [key, message] of Object.entries(fieldErrors(parsed.error))) {
+        // Report against the row that actually failed.
+        errors[`m_${key}_${index}`] ??= message
+      }
+    }
+    return parsed
   })
 
-  if (!contract.success || !equipment.success || !operator.success) {
-    return {
-      errors: {
-        ...(contract.success ? {} : fieldErrors(contract.error)),
-        ...(equipment.success ? {} : fieldErrors(equipment.error)),
-        ...(operator.success ? {} : fieldErrors(operator.error)),
-      },
-      values,
+  const operators = operatorRows.map((row, index) => {
+    const parsed = operatorAssignmentSchema.safeParse({
+      ...row,
+      startDate,
+      reason: 'INITIAL',
+    })
+    if (!parsed.success) {
+      for (const [key, message] of Object.entries(fieldErrors(parsed.error))) {
+        errors[`o_${key}_${index}`] ??= message
+      }
     }
+    return parsed
+  })
+
+  if (Object.keys(errors).length > 0 || !contract.success) {
+    return { errors, values }
   }
 
   const created = await db.contract.create({
     data: {
       ...contract.data,
       equipmentAssignments: {
-        create: {
-          equipmentId: equipment.data.equipmentId,
-          // The first machine starts when the project mobilizes.
-          startDate: contract.data.mobilizationDate,
-          rateType: equipment.data.rateType,
-          rateAmount: equipment.data.rateAmount,
-          reason: 'INITIAL',
-          note: equipment.data.note,
-        },
+        create: machines
+          .filter((m) => m.success)
+          .map((m) => ({
+            equipmentId: m.data.equipmentId,
+            startDate: contract.data.mobilizationDate,
+            rateType: m.data.rateType,
+            rateAmount: m.data.rateAmount,
+            reason: 'INITIAL',
+            note: m.data.note,
+          })),
       },
       operatorAssignments: {
-        create: {
-          arrangement: operator.data.arrangement,
-          operatorId:
-            operator.data.arrangement === 'WITHOUT_OPERATOR'
-              ? null
-              : operator.data.operatorId,
-          startDate: contract.data.mobilizationDate,
-          reason: 'INITIAL',
-          operatorCost: operator.data.operatorCost,
-          operatorRebill: operator.data.operatorRebill,
-          note: operator.data.note,
-        },
+        create: operators
+          .filter((o) => o.success)
+          .map((o) => ({
+            arrangement: o.data.arrangement,
+            operatorId:
+              o.data.arrangement === 'WITHOUT_OPERATOR' ? null : o.data.operatorId,
+            equipmentId: o.data.equipmentId,
+            startDate: contract.data.mobilizationDate,
+            reason: 'INITIAL',
+            operatorCost: o.data.operatorCost,
+            operatorRebill: o.data.operatorRebill,
+            note: o.data.note,
+          })),
       },
     },
   })
@@ -162,6 +237,11 @@ export async function replaceEquipment(
     }
   }
 
+  // Operators pointing at the outgoing machine would otherwise be left
+  // referring to a machine no longer on the contract. Moving them is opt-in,
+  // because sometimes the operator leaves with the machine.
+  const carryOperators = formData.get('carryOperators') !== null
+
   await db.$transaction([
     db.equipmentAssignment.update({
       where: { id: assignmentId },
@@ -178,6 +258,18 @@ export async function replaceEquipment(
         note: parsed.data.note,
       },
     }),
+    ...(carryOperators
+      ? [
+          db.operatorAssignment.updateMany({
+            where: {
+              contractId: outgoing.contractId,
+              equipmentId: outgoing.equipmentId,
+              endDate: null,
+            },
+            data: { equipmentId: parsed.data.equipmentId },
+          }),
+        ]
+      : []),
   ])
 
   revalidatePath('/contracts')
@@ -227,6 +319,47 @@ export async function endEquipmentAssignment(
 // Operator assignments
 // ---------------------------------------------------------------------------
 
+/**
+ * Adds another operator alongside the existing ones, not a replacement.
+ *
+ * A contract can carry several operators for the same reason it can carry
+ * several machines — typically one per machine.
+ */
+export async function addOperatorAssignment(
+  contractId: string,
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const values = readForm(formData)
+  const parsed = operatorAssignmentSchema.safeParse(values)
+
+  if (!parsed.success) {
+    return { errors: fieldErrors(parsed.error), values }
+  }
+
+  await db.operatorAssignment.create({
+    data: {
+      contractId,
+      arrangement: parsed.data.arrangement,
+      operatorId:
+        parsed.data.arrangement === 'WITHOUT_OPERATOR'
+          ? null
+          : parsed.data.operatorId,
+      equipmentId: parsed.data.equipmentId,
+      startDate: parsed.data.startDate,
+      reason: parsed.data.reason,
+      operatorCost: parsed.data.operatorCost,
+      operatorRebill: parsed.data.operatorRebill,
+      note: parsed.data.note,
+    },
+  })
+
+  revalidatePath('/contracts')
+  revalidatePath(`/contracts/${contractId}`)
+
+  return {}
+}
+
 /** Same close-and-open rule as replaceEquipment — see the note there. */
 export async function replaceOperator(
   assignmentId: string,
@@ -270,6 +403,7 @@ export async function replaceOperator(
           parsed.data.arrangement === 'WITHOUT_OPERATOR'
             ? null
             : parsed.data.operatorId,
+        equipmentId: parsed.data.equipmentId ?? outgoing.equipmentId,
         startDate: parsed.data.startDate,
         reason: parsed.data.reason,
         operatorCost: parsed.data.operatorCost,

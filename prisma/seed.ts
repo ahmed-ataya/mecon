@@ -416,7 +416,8 @@ async function main() {
     data: {
       customerId: qatariDiar.id,
       projectName: 'Lusail Boulevard — Phase 3 earthworks',
-      site: 'QATAR_ENERGY',
+      siteName: 'Lusail Boulevard',
+      siteRegime: 'QATAR_ENERGY',
       mobilizationDate: d('2026-08-01'),
       lpoNumber: 'LPO-2026-4471',
       lpoValidity: d('2026-09-15'), // expiring soon — amber on the card
@@ -461,7 +462,8 @@ async function main() {
     data: {
       customerId: alBandary.id,
       projectName: 'Al Wakrah warehouse slab',
-      site: 'DOHA_GENERAL',
+      siteName: 'Al Wakrah Industrial Area',
+      siteRegime: 'DOHA_GENERAL',
       mobilizationDate: d('2026-07-15'),
       lpoNumber: 'LPO-2026-3980',
       lpoValidity: d('2026-12-31'),
@@ -506,7 +508,8 @@ async function main() {
     data: {
       customerId: midmac.id,
       projectName: 'Ras Laffan pipe rack',
-      site: 'RAS_LAFFAN',
+      siteName: 'Ras Laffan Industrial City',
+      siteRegime: 'RAS_LAFFAN',
       mobilizationDate: d('2026-10-01'),
       lpoNumber: 'LPO-2026-5120',
       lpoValidity: d('2027-03-31'),

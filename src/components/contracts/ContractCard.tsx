@@ -40,12 +40,14 @@ type OperatorAssignment = Assignment & {
   arrangement: string
   operatorRebill: number | null
   operator: { id: string; name: string } | null
+  equipment: { id: string; name: string } | null
 }
 
 export type ContractCardData = {
   id: string
   projectName: string
-  site: string
+  siteName: string
+  siteRegime: string
   mobilizationDate: Date
   closingDate: Date | null
   lpoNumber: string | null
@@ -97,7 +99,11 @@ export function ContractCard({ contract }: { contract: ContractCardData }) {
             {contract.customer.name}
           </p>
           <p className="mt-0.5 text-xs text-slate-500">
-            {SITE_LABELS[contract.site as Site] ?? contract.site}
+            {contract.siteName}
+            <span className="text-slate-400">
+              {' · '}
+              {SITE_LABELS[contract.siteRegime as Site] ?? contract.siteRegime}
+            </span>
           </p>
         </div>
 
@@ -171,6 +177,11 @@ export function ContractCard({ contract }: { contract: ContractCardData }) {
                     {ARRANGEMENT_LABELS[assignment.arrangement as Arrangement] ??
                       assignment.arrangement}
                   </span>
+                  {assignment.equipment && (
+                    <span className="text-xs text-slate-400">
+                      on {assignment.equipment.name}
+                    </span>
+                  )}
                   {assignment.operatorRebill !== null && (
                     <span className="text-xs text-slate-400">
                       rebill {formatQar(assignment.operatorRebill)}

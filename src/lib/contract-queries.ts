@@ -17,7 +17,11 @@ export const contractInclude = {
     orderBy: { startDate: 'asc' },
   },
   operatorAssignments: {
-    include: { operator: { include: { documents: true } } },
+    include: {
+      operator: { include: { documents: true } },
+      // Which machine this operator runs, when the contract has several.
+      equipment: { select: { id: true, name: true } },
+    },
     orderBy: { startDate: 'asc' },
   },
 } as const

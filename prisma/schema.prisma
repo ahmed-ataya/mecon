@@ -62,8 +62,9 @@ model Equipment {
   plateNumber  String?
   notes        String?
 
-  documents   Document[]
-  assignments EquipmentAssignment[]
+  documents           Document[]
+  assignments         EquipmentAssignment[]
+  operatorAssignments OperatorAssignment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -183,9 +184,19 @@ model Contract {
 
   projectName String
 
+  /// The actual place, free text — "Barzan Onshore", "Al Wakrah warehouse".
+  /// Free text on purpose: a fixed list collapsed every unlisted location to
+  /// "Other" and lost the real name. The form autocompletes it from locations
+  /// already used, so the list grows with use.
+  siteName String
+
   /// DOHA_GENERAL | QATAR_ENERGY | RAS_LAFFAN | MESAIEED | OTHER
-  /// Drives which 3rd party certificates are acceptable.
-  site String
+  ///
+  /// Which certification regime applies, kept SEPARATE from the name. General
+  /// Doha work accepts any 3rd party certificate; the operator-run sites only
+  /// accept their own approved companies. The name alone cannot be trusted to
+  /// determine this, so it is recorded explicitly.
+  siteRegime String
 
   /// Fixed. Belongs to the project — never edited on equipment/operator swap.
   mobilizationDate DateTime
@@ -213,7 +224,8 @@ model Contract {
   updatedAt DateTime @updatedAt
 
   @@index([customerId])
-  @@index([site])
+  @@index([siteRegime])
+  @@index([siteName])
   @@index([mobilizationDate])
 }
 
@@ -265,6 +277,13 @@ model OperatorAssignment {
   operatorId String?
   operator   Operator? @relation(fields: [operatorId], references: [id])
 
+  /// Which machine this operator runs, when the contract has several.
+  /// Nullable: an operator is not always tied to a specific machine, and
+  /// WITHOUT_OPERATOR rows never are. Points at the Equipment rather than at
+  /// one EquipmentAssignment so the link survives a machine being swapped.
+  equipmentId String?
+  equipment   Equipment? @relation(fields: [equipmentId], references: [id])
+
   /// WITH_OPERATOR | WITHOUT_OPERATOR | MARKET_OPERATOR
   arrangement String
 
@@ -291,6 +310,7 @@ model OperatorAssignment {
 
   @@index([contractId])
   @@index([operatorId])
+  @@index([equipmentId])
 }
 
 // ---------------------------------------------------------------------------

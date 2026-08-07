@@ -78,7 +78,8 @@ CREATE TABLE "Contract" (
     "id" TEXT NOT NULL,
     "customerId" TEXT NOT NULL,
     "projectName" TEXT NOT NULL,
-    "site" TEXT NOT NULL,
+    "siteName" TEXT NOT NULL,
+    "siteRegime" TEXT NOT NULL,
     "mobilizationDate" TIMESTAMP(3) NOT NULL,
     "closingDate" TIMESTAMP(3),
     "lpoNumber" TEXT,
@@ -112,6 +113,7 @@ CREATE TABLE "OperatorAssignment" (
     "id" TEXT NOT NULL,
     "contractId" TEXT NOT NULL,
     "operatorId" TEXT,
+    "equipmentId" TEXT,
     "arrangement" TEXT NOT NULL,
     "startDate" TIMESTAMP(3) NOT NULL,
     "endDate" TIMESTAMP(3),
@@ -192,7 +194,10 @@ CREATE UNIQUE INDEX "DocumentApproval_documentId_body_key" ON "DocumentApproval"
 CREATE INDEX "Contract_customerId_idx" ON "Contract"("customerId");
 
 -- CreateIndex
-CREATE INDEX "Contract_site_idx" ON "Contract"("site");
+CREATE INDEX "Contract_siteRegime_idx" ON "Contract"("siteRegime");
+
+-- CreateIndex
+CREATE INDEX "Contract_siteName_idx" ON "Contract"("siteName");
 
 -- CreateIndex
 CREATE INDEX "Contract_mobilizationDate_idx" ON "Contract"("mobilizationDate");
@@ -208,6 +213,9 @@ CREATE INDEX "OperatorAssignment_contractId_idx" ON "OperatorAssignment"("contra
 
 -- CreateIndex
 CREATE INDEX "OperatorAssignment_operatorId_idx" ON "OperatorAssignment"("operatorId");
+
+-- CreateIndex
+CREATE INDEX "OperatorAssignment_equipmentId_idx" ON "OperatorAssignment"("equipmentId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Invoice_invoiceNumber_key" ON "Invoice"("invoiceNumber");
@@ -247,6 +255,9 @@ ALTER TABLE "OperatorAssignment" ADD CONSTRAINT "OperatorAssignment_contractId_f
 
 -- AddForeignKey
 ALTER TABLE "OperatorAssignment" ADD CONSTRAINT "OperatorAssignment_operatorId_fkey" FOREIGN KEY ("operatorId") REFERENCES "Operator"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "OperatorAssignment" ADD CONSTRAINT "OperatorAssignment_equipmentId_fkey" FOREIGN KEY ("equipmentId") REFERENCES "Equipment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Invoice" ADD CONSTRAINT "Invoice_contractId_fkey" FOREIGN KEY ("contractId") REFERENCES "Contract"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -193,6 +193,7 @@ export function EquipmentTimeline({
                     defaultRateType={assignment.rateType}
                     defaultRateAmount={assignment.rateAmount}
                     minDate={assignment.startDate}
+                    showCarryOperators
                     onDone={() => setReplacing(null)}
                   />
                 </div>
@@ -213,6 +214,7 @@ function AssignmentForm({
   defaultRateType,
   defaultRateAmount,
   minDate,
+  showCarryOperators,
   onDone,
 }: {
   action: (
@@ -225,6 +227,8 @@ function AssignmentForm({
   defaultRateType?: string
   defaultRateAmount?: number
   minDate?: Date
+  /** Offer to move operators tied to the outgoing machine onto the new one. */
+  showCarryOperators?: boolean
   onDone: () => void
 }) {
   const [state, formAction, pending] = useActionState(action, {})
@@ -332,6 +336,26 @@ function AssignmentForm({
       <Field label="Note" htmlFor="note">
         <input id="note" name="note" className={inputClass} />
       </Field>
+
+      {showCarryOperators && (
+        <label className="flex items-start gap-3 rounded-md bg-slate-50 px-4 py-3 ring-1 ring-inset ring-slate-200">
+          <input
+            type="checkbox"
+            name="carryOperators"
+            defaultChecked
+            className="mt-0.5 h-4 w-4 rounded border-slate-300"
+          />
+          <span className="text-sm">
+            <span className="font-medium text-slate-800">
+              Move operators to the new machine
+            </span>
+            <span className="mt-0.5 block text-xs text-slate-500">
+              Anyone currently recorded as running the outgoing machine will be
+              pointed at the replacement. Untick if the operator leaves with it.
+            </span>
+          </span>
+        </label>
+      )}
 
       <div className="flex gap-3">
         <button type="submit" disabled={pending} className={buttonPrimaryClass}>

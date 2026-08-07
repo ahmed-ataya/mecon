@@ -30,7 +30,8 @@ type DocumentLike = {
 type CertificateLike = DocumentLike & { approvedFor: { body: string }[] }
 
 export type ContractForWarnings = {
-  site: string
+  siteName: string
+  siteRegime: string
   lpoNumber: string | null
   lpoValidity: Date | null
   customer: { name: string; documents: DocumentLike[] }
@@ -69,8 +70,9 @@ export function getContractWarnings(
 
     const siteWarning = siteApprovalWarning(
       equipment.name,
-      contract.site as Site,
+      contract.siteRegime as Site,
       equipment.documents,
+      contract.siteName,
     )
     if (siteWarning) warnings.push(siteWarning)
 

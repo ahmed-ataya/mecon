@@ -4,6 +4,7 @@ import { createContract } from '@/lib/actions/contracts'
 import {
   loadCustomerOptions,
   loadEquipmentOptions,
+  loadLocationOptions,
   loadOperatorOptions,
 } from '@/lib/contract-options'
 
@@ -17,10 +18,11 @@ import {
 export const dynamic = 'force-dynamic'
 
 export default async function NewContractPage() {
-  const [customers, equipment, operators] = await Promise.all([
+  const [customers, equipment, operators, locations] = await Promise.all([
     loadCustomerOptions(),
     loadEquipmentOptions(),
     loadOperatorOptions(),
+    loadLocationOptions(),
   ])
 
   return (
@@ -46,6 +48,7 @@ export default async function NewContractPage() {
         customers={customers}
         equipment={equipment}
         operators={operators}
+        locations={locations}
         cancelHref="/contracts"
       />
     </div>

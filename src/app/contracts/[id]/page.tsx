@@ -32,6 +32,21 @@ export default async function ContractDetailPage({
 
   if (!contract) notFound()
 
+  // Only machines actually on this contract can be picked as the one an
+  // operator runs — offering the whole yard would be meaningless here.
+  const machineChoices = [
+    ...new Map(
+      contract.equipmentAssignments.map((assignment) => [
+        assignment.equipment.id,
+        {
+          value: assignment.equipment.id,
+          label: assignment.equipment.name,
+          sublabel: assignment.equipment.type,
+        },
+      ]),
+    ).values(),
+  ]
+
   return (
     <div className="space-y-6">
       <div>
@@ -64,7 +79,7 @@ export default async function ContractDetailPage({
                 {contract.customer.name}
               </Link>
               {' · '}
-              {SITE_LABELS[contract.site as Site] ?? contract.site}
+              {contract.siteName}
             </p>
           </div>
 
@@ -96,8 +111,11 @@ export default async function ContractDetailPage({
             }
           />
           <Detail
-            label="Site"
-            value={SITE_LABELS[contract.site as Site] ?? contract.site}
+            label="Location"
+            value={contract.siteName}
+            hint={`${
+              SITE_LABELS[contract.siteRegime as Site] ?? contract.siteRegime
+            } certification applies`}
           />
           <Detail label="LPO number" value={contract.lpoNumber || '—'} />
           <Detail
@@ -117,8 +135,10 @@ export default async function ContractDetailPage({
       />
 
       <OperatorTimeline
+        contractId={contract.id}
         assignments={contract.operatorAssignments}
         operatorOptions={operatorOptions}
+        machineChoices={machineChoices}
       />
     </div>
   )

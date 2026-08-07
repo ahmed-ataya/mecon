@@ -3,7 +3,10 @@ import { notFound } from 'next/navigation'
 import { db } from '@/lib/db'
 import { ContractDetailsForm } from '@/components/contracts/ContractDetailsForm'
 import { updateContract } from '@/lib/actions/contracts'
-import { loadCustomerOptions } from '@/lib/contract-options'
+import {
+  loadCustomerOptions,
+  loadLocationOptions,
+} from '@/lib/contract-options'
 
 export default async function EditContractPage({
   params,
@@ -12,9 +15,10 @@ export default async function EditContractPage({
 }) {
   const { id } = await params
 
-  const [contract, customers] = await Promise.all([
+  const [contract, customers, locations] = await Promise.all([
     db.contract.findUnique({ where: { id } }),
     loadCustomerOptions(),
+    loadLocationOptions(),
   ])
 
   if (!contract) notFound()
@@ -40,6 +44,7 @@ export default async function EditContractPage({
       <ContractDetailsForm
         action={updateContract.bind(null, id)}
         customers={customers}
+        locations={locations}
         contract={contract}
         cancelHref={`/contracts/${id}`}
       />

@@ -6,7 +6,7 @@ import type { Contract } from '@prisma/client'
 import { SITES, SITE_LABELS } from '@/lib/enums'
 import { toDateInputValue } from '@/lib/dates'
 import { toRiyalInput } from '@/lib/money'
-import type { PartyOption } from '@/lib/contract-options'
+import type { LocationOption, PartyOption } from '@/lib/contract-options'
 import type { ActionState } from '@/lib/actions/contracts'
 import { Combobox } from '@/components/ui/Combobox'
 import {
@@ -29,11 +29,13 @@ import { WarningList } from './WarningList'
 export function ContractDetailsForm({
   action,
   customers,
+  locations,
   contract,
   cancelHref,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
   customers: PartyOption[]
+  locations: LocationOption[]
   contract: Contract
   cancelHref: string
 }) {
@@ -44,12 +46,14 @@ export function ContractDetailsForm({
   const [customerId, setCustomerId] = useState(
     values.customerId ?? contract.customerId,
   )
-  const [site, setSite] = useState(values.site ?? contract.site)
+  const [siteRegime, setSiteRegime] = useState(
+    values.siteRegime ?? contract.siteRegime,
+  )
 
   // Selects lose their value to React's post-action form reset — see NOTES.md.
   const siteRef = useRef<HTMLSelectElement>(null)
   useEffect(() => {
-    if (siteRef.current) siteRef.current.value = site
+    if (siteRef.current) siteRef.current.value = siteRegime
   })
 
   const selectedCustomer = customers.find((c) => c.value === customerId)
@@ -72,6 +76,29 @@ export function ContractDetailsForm({
           )}
         </Field>
 
+        <Field
+          label="Location"
+          htmlFor="siteName"
+          hint="Type any location. Suggestions come from places already used."
+        >
+          <Combobox
+            name="siteName"
+            options={locations}
+            defaultValue={values.siteName ?? contract.siteName}
+            placeholder="e.g. Barzan Onshore"
+            allowCustom
+            onSelect={(value) => {
+              const known = locations.find(
+                (l) => l.value.toLowerCase() === value.trim().toLowerCase(),
+              )
+              if (known) setSiteRegime(known.regime)
+            }}
+          />
+          {errors.siteName && (
+            <p className="mt-1 text-xs text-red-600">{errors.siteName}</p>
+          )}
+        </Field>
+
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="Project name" htmlFor="projectName">
             <input
@@ -85,13 +112,17 @@ export function ContractDetailsForm({
             )}
           </Field>
 
-          <Field label="Site" htmlFor="site">
+          <Field
+            label="Certification applies"
+            htmlFor="siteRegime"
+            hint="Which regime's 3rd party certificates this location accepts."
+          >
             <select
-              id="site"
-              name="site"
+              id="siteRegime"
+              name="siteRegime"
               ref={siteRef}
-              defaultValue={site}
-              onChange={(event) => setSite(event.target.value)}
+              defaultValue={siteRegime}
+              onChange={(event) => setSiteRegime(event.target.value)}
               className={inputClass}
             >
               {SITES.map((value) => (

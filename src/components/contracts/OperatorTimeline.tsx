@@ -15,7 +15,10 @@ import {
 } from '@/lib/enums'
 import { formatQar, toRiyalInput } from '@/lib/money'
 import type { PartyOption } from '@/lib/contract-options'
-import { replaceOperator } from '@/lib/actions/contracts'
+import {
+  addOperatorAssignment,
+  replaceOperator,
+} from '@/lib/actions/contracts'
 import { Combobox } from '@/components/ui/Combobox'
 import {
   Field,
@@ -35,6 +38,7 @@ export type OperatorAssignmentRow = {
   operatorCost: number | null
   operatorRebill: number | null
   operator: { id: string; name: string } | null
+  equipment: { id: string; name: string } | null
 }
 
 /**
@@ -43,23 +47,65 @@ export type OperatorAssignmentRow = {
  * before the replacement starts, never overwritten.
  */
 export function OperatorTimeline({
+  contractId,
   assignments,
   operatorOptions,
+  machineChoices,
 }: {
+  contractId: string
   assignments: OperatorAssignmentRow[]
   operatorOptions: PartyOption[]
+  machineChoices: { value: string; label: string; sublabel?: string }[]
 }) {
   const [replacing, setReplacing] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-6">
-      <div className="mb-4">
-        <h2 className="font-semibold">Operators</h2>
-        <p className="mt-0.5 text-sm text-slate-500">
-          {assignments.length}{' '}
-          {assignments.length === 1 ? 'assignment' : 'assignments'} on record
-        </p>
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h2 className="font-semibold">Operators</h2>
+          <p className="mt-0.5 text-sm text-slate-500">
+            {assignments.length}{' '}
+            {assignments.length === 1 ? 'assignment' : 'assignments'} on record
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setAdding((open) => !open)
+            setReplacing(null)
+          }}
+          className={buttonSecondaryClass}
+        >
+          {adding ? 'Cancel' : 'Add operator'}
+        </button>
       </div>
+
+      {adding && (
+        <div className="mb-5 rounded-md border border-slate-200 p-4">
+          <p className="mb-3 text-sm font-medium text-slate-700">
+            Add another operator
+          </p>
+          <p className="mb-4 text-xs text-slate-500">
+            This runs alongside the existing operators — typically one per
+            machine. To swap someone out instead, use Replace on their row so
+            the history is closed properly.
+          </p>
+          <OperatorAssignmentForm
+            action={addOperatorAssignment.bind(null, contractId)}
+            operatorOptions={operatorOptions}
+            machineChoices={machineChoices}
+            defaultArrangement="WITH_OPERATOR"
+            defaultReason="INITIAL"
+            defaultCost={null}
+            defaultRebill={null}
+            defaultEquipmentId=""
+            submitLabel="Add operator"
+            onDone={() => setAdding(false)}
+          />
+        </div>
+      )}
 
       <ol className="space-y-3">
         {assignments.map((assignment) => {
@@ -116,6 +162,12 @@ export function OperatorTimeline({
                     {assignment.endDate
                       ? formatDate(assignment.endDate)
                       : 'ongoing'}
+                    {assignment.equipment && (
+                      <span className="text-slate-400">
+                        {' · runs '}
+                        {assignment.equipment.name}
+                      </span>
+                    )}
                   </p>
 
                   {(assignment.operatorCost !== null ||
@@ -168,13 +220,17 @@ export function OperatorTimeline({
                     The current assignment will be closed the day before the
                     replacement starts, keeping billing continuous.
                   </p>
-                  <ReplaceOperatorForm
-                    assignmentId={assignment.id}
+                  <OperatorAssignmentForm
+                    action={replaceOperator.bind(null, assignment.id)}
                     operatorOptions={operatorOptions}
+                    machineChoices={machineChoices}
                     defaultArrangement={assignment.arrangement as Arrangement}
+                    defaultReason="SICK_INJURED"
                     defaultCost={assignment.operatorCost}
                     defaultRebill={assignment.operatorRebill}
+                    defaultEquipmentId={assignment.equipment?.id ?? ''}
                     minDate={assignment.startDate}
+                    submitLabel="Replace operator"
                     onDone={() => setReplacing(null)}
                   />
                 </div>
@@ -187,33 +243,42 @@ export function OperatorTimeline({
   )
 }
 
-function ReplaceOperatorForm({
-  assignmentId,
+/** Shared by "Add operator" and "Replace" — the parent binds the action. */
+function OperatorAssignmentForm({
+  action,
   operatorOptions,
+  machineChoices,
   defaultArrangement,
+  defaultReason,
   defaultCost,
   defaultRebill,
+  defaultEquipmentId,
   minDate,
+  submitLabel,
   onDone,
 }: {
-  assignmentId: string
+  action: (
+    state: { errors?: Record<string, string> },
+    formData: FormData,
+  ) => Promise<{ errors?: Record<string, string> }>
   operatorOptions: PartyOption[]
+  machineChoices: { value: string; label: string; sublabel?: string }[]
   defaultArrangement: Arrangement
+  defaultReason: string
   defaultCost: number | null
   defaultRebill: number | null
-  minDate: Date
+  defaultEquipmentId: string
+  minDate?: Date
+  submitLabel: string
   onDone: () => void
 }) {
-  const [state, formAction, pending] = useActionState(
-    replaceOperator.bind(null, assignmentId),
-    {},
-  )
+  const [state, formAction, pending] = useActionState(action, {})
   const errors = state.errors ?? {}
 
   const [arrangement, setArrangement] = useState<Arrangement>(
     defaultArrangement,
   )
-  const [reason, setReason] = useState('SICK_INJURED')
+  const [reason, setReason] = useState(defaultReason)
 
   // Selects lose their value to React's post-action form reset — see NOTES.md.
   const arrangementRef = useRef<HTMLSelectElement>(null)
@@ -288,15 +353,33 @@ function ReplaceOperatorForm({
       )}
 
       <Field
+        label="Runs which machine"
+        htmlFor="equipmentId"
+        hint="Optional — leave blank if not tied to one machine."
+      >
+        <Combobox
+          name="equipmentId"
+          options={machineChoices}
+          defaultValue={defaultEquipmentId}
+          placeholder="Search machines on this contract…"
+          emptyLabel="No machines on this contract"
+        />
+      </Field>
+
+      <Field
         label="Start date"
         htmlFor="startDate"
-        hint={`Must be after ${formatDate(minDate)}.`}
+        hint={
+          minDate
+            ? `Must be after ${formatDate(minDate)}.`
+            : 'When this operator starts.'
+        }
       >
         <input
           id="startDate"
           name="startDate"
           type="date"
-          min={toDateInputValue(minDate)}
+          min={minDate ? toDateInputValue(minDate) : undefined}
           className={inputClass}
         />
         {errors.startDate && (
@@ -334,7 +417,7 @@ function ReplaceOperatorForm({
 
       <div className="flex gap-3">
         <button type="submit" disabled={pending} className={buttonPrimaryClass}>
-          {pending ? 'Saving…' : 'Replace operator'}
+          {pending ? 'Saving…' : submitLabel}
         </button>
         <button type="button" onClick={onDone} className={buttonSecondaryClass}>
           Cancel

@@ -113,11 +113,15 @@ export function siteApprovalWarning(
   equipmentName: string,
   site: Site,
   documents: CertificateLike[],
+  siteName?: string,
 ): Warning | null {
   const required = SITE_REQUIRED_APPROVAL[site]
 
   // General Doha and Other accept any certificate.
   if (!required) return null
+
+  // Name the actual place when we have it, falling back to the regime label.
+  const where = siteName ? `${siteName} (${SITE_LABELS[site]})` : SITE_LABELS[site]
 
   const certificates = documents.filter(
     (document) =>
@@ -128,7 +132,7 @@ export function siteApprovalWarning(
     return {
       code: 'CERTIFICATE_MISSING',
       severity: 'RED',
-      message: `${equipmentName} has no 3rd party certificate on file, and ${SITE_LABELS[site]} requires one from an approved company.`,
+      message: `${equipmentName} has no 3rd party certificate on file, and ${where} requires one from an approved company.`,
     }
   }
 
@@ -150,8 +154,8 @@ export function siteApprovalWarning(
     code: 'CERTIFICATE_NOT_APPROVED_FOR_SITE',
     severity: 'RED',
     message: expiredButCovering
-      ? `${equipmentName}: the only certificate approved for ${SITE_LABELS[site]} has expired.`
-      : `${equipmentName}: 3rd party certificate is not approved for ${SITE_LABELS[site]}.`,
+      ? `${equipmentName}: the only certificate approved for ${where} has expired.`
+      : `${equipmentName}: 3rd party certificate is not approved for ${where}.`,
   }
 }
 
