@@ -45,6 +45,17 @@ export function formatAmountExact(halalas: number | null | undefined): string {
 }
 
 /**
+ * Halalas back to a plain riyal string for an editable form field — "13750"
+ * becomes "137.5". No thousands separators, so it round-trips through
+ * parseQar unchanged.
+ */
+export function toRiyalInput(halalas: number | null | undefined): string {
+  if (halalas === null || halalas === undefined) return ''
+
+  return String(halalas / HALALAS_PER_RIYAL)
+}
+
+/**
  * Parse a riyal amount typed by a user ("137.5", "1,200", "137.50") into
  * integer halalas. Returns null for blank, and undefined for unparseable
  * input so a caller can tell "not supplied" from "not a number".

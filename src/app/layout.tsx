@@ -7,9 +7,10 @@ export const metadata: Metadata = {
   description: 'Equipment rental and contracting operations',
 }
 
-// Contracts arrive in phase 2 and Invoices in phase 3. Links are added as each
-// ships, so the nav never points at a page that does not exist yet.
+// Invoices arrive in phase 3. Links are added as each ships, so the nav never
+// points at a page that does not exist yet.
 const NAV = [
+  { href: '/contracts', label: 'Contracts' },
   { href: '/customers', label: 'Customers' },
   { href: '/equipment', label: 'Equipment' },
   { href: '/operators', label: 'Operators' },

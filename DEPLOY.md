@@ -35,9 +35,13 @@ Treat that string as a password. It grants full read/write to the database.
    Add both to **all** environments (Production, Preview, Development).
 4. Deploy.
 
-The build command is `prisma generate && prisma migrate deploy && next build`,
-so the database schema is created automatically on the first deploy. You do not
+Vercel runs the `vercel-build` script, which is
+`prisma generate && prisma migrate deploy && next build` — so the database
+schema is created and kept up to date automatically on every deploy. You do not
 need to run migrations by hand.
+
+Plain `npm run build` deliberately leaves `migrate deploy` out, so building
+locally does not require a live database.
 
 ## 3. Load the sample data (once)
 

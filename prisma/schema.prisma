@@ -193,12 +193,9 @@ model Contract {
   /// Null means ongoing
   closingDate DateTime?
 
-  /// PER_DAY | PER_MONTH | PER_WORKING_HOUR
-  rateType String
-
-  /// Integer HALALAS (1 riyal = 100 halalas) — see src/lib/money.ts.
-  /// Rates carry decimals (137.50/hr is normal), so riyals is too coarse.
-  rateAmount Int
+  // Rate is NOT here — it lives on each EquipmentAssignment. A contract can
+  // run several machines at once at different rates, so a single contract-wide
+  // rate cannot express the real agreement.
 
   lpoNumber   String?
   lpoValidity DateTime?
@@ -222,6 +219,9 @@ model Contract {
 
 /// Never overwritten on replacement. To swap a machine: set endDate on the
 /// current row to the day before, then insert a new row.
+///
+/// A contract may run several of these concurrently — a contract is not
+/// limited to one machine — and each carries its own rate.
 model EquipmentAssignment {
   id          String    @id @default(cuid())
   contractId  String
@@ -232,6 +232,16 @@ model EquipmentAssignment {
   startDate DateTime
   /// Null means currently assigned
   endDate   DateTime?
+
+  /// PER_DAY | PER_MONTH | PER_WORKING_HOUR.
+  /// Per assignment, not per contract: concurrent machines can be on different
+  /// rates, and a replacement machine may come in at a different rate than the
+  /// one it replaced. Phase 3 billing reads the rate from here.
+  rateType String
+
+  /// Integer HALALAS (1 riyal = 100 halalas) — see src/lib/money.ts.
+  /// Rates carry decimals (137.50/hr is normal), so riyals is too coarse.
+  rateAmount Int
 
   /// INITIAL | BREAKDOWN_REPLACEMENT | CUSTOMER_REQUEST | SCHEDULED_SWAP | OTHER
   reason String @default("INITIAL")

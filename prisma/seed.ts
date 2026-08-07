@@ -400,7 +400,142 @@ async function main() {
     },
   })
 
+  // --- Contracts ----------------------------------------------------------
+
+  // The scenario from the spec, seeded so the replacement rule is visible
+  // without anyone having to recreate it by hand:
+  //
+  //   CAT 320 #4 mobilizes 1 Aug and starts working 2 Aug.
+  //   On 7 Aug it breaks down and is replaced.
+  //   Komatsu WA380 #2 starts 8 Aug.
+  //
+  // ONE contract, TWO equipment assignments. The mobilization date never
+  // moved, and neither assignment was overwritten, so billing stays continuous
+  // across the swap.
+  const breakdown = await db.contract.create({
+    data: {
+      customerId: qatariDiar.id,
+      projectName: 'Lusail Boulevard — Phase 3 earthworks',
+      site: 'QATAR_ENERGY',
+      mobilizationDate: d('2026-08-01'),
+      lpoNumber: 'LPO-2026-4471',
+      lpoValidity: d('2026-09-15'), // expiring soon — amber on the card
+      lpoAmount: 45_000_00, // halalas
+      equipmentAssignments: {
+        create: [
+          {
+            equipmentId: cat320.id,
+            startDate: d('2026-08-02'),
+            endDate: d('2026-08-07'), // closed the day before the replacement
+            rateType: 'PER_DAY',
+            rateAmount: 1_250_00,
+            reason: 'INITIAL',
+            note: 'Hydraulic pump failure on 7 Aug.',
+          },
+          {
+            equipmentId: komatsuWA380.id,
+            startDate: d('2026-08-08'),
+            rateType: 'PER_DAY',
+            rateAmount: 1_250_00,
+            reason: 'BREAKDOWN_REPLACEMENT',
+            note: 'Replacement for CAT 320 #4.',
+          },
+        ],
+      },
+      operatorAssignments: {
+        create: [
+          {
+            operatorId: rajesh.id,
+            arrangement: 'WITH_OPERATOR',
+            startDate: d('2026-08-02'),
+            reason: 'INITIAL',
+          },
+        ],
+      },
+    },
+  })
+
+  // A second contract, ongoing, with a market operator so the cost/rebill
+  // margin has something to show.
+  await db.contract.create({
+    data: {
+      customerId: alBandary.id,
+      projectName: 'Al Wakrah warehouse slab',
+      site: 'DOHA_GENERAL',
+      mobilizationDate: d('2026-07-15'),
+      lpoNumber: 'LPO-2026-3980',
+      lpoValidity: d('2026-12-31'),
+      lpoAmount: 120_000_00,
+      equipmentAssignments: {
+        create: [
+          {
+            equipmentId: jcb3cx.id,
+            startDate: d('2026-07-15'),
+            rateType: 'PER_WORKING_HOUR',
+            // 137.50/hr — the decimal case that forced halala storage
+            rateAmount: 137_50,
+            reason: 'INITIAL',
+          },
+          {
+            equipmentId: bobcatS570.id,
+            startDate: d('2026-07-20'),
+            rateType: 'PER_MONTH',
+            rateAmount: 8_500_00,
+            reason: 'CUSTOMER_REQUEST',
+            note: 'Second machine added at customer request.',
+          },
+        ],
+      },
+      operatorAssignments: {
+        create: [
+          {
+            operatorId: sunil.id,
+            arrangement: 'MARKET_OPERATOR',
+            startDate: d('2026-07-15'),
+            reason: 'INITIAL',
+            operatorCost: 4_200_00,
+            operatorRebill: 5_600_00,
+          },
+        ],
+      },
+    },
+  })
+
+  // An upcoming contract, so the Upcoming filter is not empty.
+  await db.contract.create({
+    data: {
+      customerId: midmac.id,
+      projectName: 'Ras Laffan pipe rack',
+      site: 'RAS_LAFFAN',
+      mobilizationDate: d('2026-10-01'),
+      lpoNumber: 'LPO-2026-5120',
+      lpoValidity: d('2027-03-31'),
+      lpoAmount: 200_000_00,
+      equipmentAssignments: {
+        create: [
+          {
+            equipmentId: cat320.id,
+            startDate: d('2026-10-01'),
+            rateType: 'PER_MONTH',
+            rateAmount: 32_000_00,
+            reason: 'INITIAL',
+          },
+        ],
+      },
+      operatorAssignments: {
+        create: [
+          {
+            arrangement: 'WITHOUT_OPERATOR',
+            startDate: d('2026-10-01'),
+            reason: 'INITIAL',
+          },
+        ],
+      },
+    },
+  })
+
   console.log('Seeded:')
+  console.log(`  contracts  3 (including ${breakdown.projectName})`)
   console.log(`  customers  ${[alBandary, qatariDiar, midmac].length}`)
   console.log(
     `  equipment  ${[cat320, komatsuWA380, jcb3cx, bobcatS570].length}`,
@@ -411,6 +546,11 @@ async function main() {
   console.log('  Al Bandary Contracting — Trade License expired 12 Jun 2026')
   console.log('  Rajesh Kumar — Medical Certificate expired 20 Jul 2026')
   console.log('  CAT 320 #4 — 3rd party cert approved for General Doha only')
+  console.log('')
+  console.log('Phase 2 scenarios:')
+  console.log('  Lusail Boulevard — breakdown swap, 1 contract / 2 machines')
+  console.log('  Ras Laffan pipe rack — CAT 320 #4 on a site its cert fails')
+  console.log('  Al Wakrah warehouse slab — 2 machines at once, 137.50/hr')
 }
 
 main()

@@ -1,8 +1,8 @@
 /**
  * Single source of truth for every enumerated value in the system.
  *
- * SQLite has no native enum type, so these live in the database as plain
- * strings. That makes this file the only thing standing between the app and
+ * These live in the database as plain strings rather than native enums (see
+ * NOTES.md), which makes this file the only thing standing between the app and
  * bad data — always validate through the zod schemas here before writing.
  *
  * Each group exports: the value tuple, a TS union type, and a label map for
