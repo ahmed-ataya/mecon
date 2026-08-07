@@ -1,7 +1,10 @@
 'use client'
 
 import { useActionState, useEffect, useRef, useState } from 'react'
-import { isAssignmentActiveOn } from '@/lib/contract-status'
+import {
+  hasAssignmentEnded,
+  isAssignmentUpcoming,
+} from '@/lib/contract-status'
 import { formatDate, toDateInputValue } from '@/lib/dates'
 import {
   ASSIGNMENT_REASON_LABELS,
@@ -96,15 +99,18 @@ export function EquipmentTimeline({
 
       <ol className="space-y-3">
         {assignments.map((assignment) => {
-          const current = isAssignmentActiveOn(assignment)
+          const ended = hasAssignmentEnded(assignment)
+          const planned = isAssignmentUpcoming(assignment)
+          // Replaceable while it is running or still to come — not once ended.
+          const current = !ended
 
           return (
             <li
               key={assignment.id}
               className={`rounded-md border p-4 ${
-                current
-                  ? 'border-slate-300 bg-white'
-                  : 'border-slate-200 bg-slate-50'
+                ended
+                  ? 'border-slate-200 bg-slate-50'
+                  : 'border-slate-300 bg-white'
               }`}
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -113,13 +119,17 @@ export function EquipmentTimeline({
                     <span className="font-medium text-slate-900">
                       {assignment.equipment.name}
                     </span>
-                    {current ? (
-                      <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-700 ring-1 ring-inset ring-green-200">
-                        Current
-                      </span>
-                    ) : (
+                    {ended ? (
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 ring-1 ring-inset ring-slate-200">
                         Ended
+                      </span>
+                    ) : planned ? (
+                      <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-700 ring-1 ring-inset ring-sky-200">
+                        Planned
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-700 ring-1 ring-inset ring-green-200">
+                        Current
                       </span>
                     )}
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">

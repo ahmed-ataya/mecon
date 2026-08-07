@@ -1,4 +1,4 @@
-import { isAssignmentActiveOn } from './contract-status'
+import { hasAssignmentEnded } from './contract-status'
 import type { Site } from './enums'
 import {
   documentWarnings,
@@ -11,9 +11,13 @@ import {
 /**
  * Assembles every warning for one contract.
  *
- * Only CURRENT assignments are checked. A machine that came off the contract
- * in June should not still be raising certificate warnings in August — that is
- * noise, and noise is what makes people stop reading warnings.
+ * Assignments that have ENDED are skipped: a machine that came off the
+ * contract in June should not still raise certificate warnings in August, and
+ * that noise is what makes people stop reading warnings.
+ *
+ * Assignments that have not started yet ARE checked. An upcoming contract on a
+ * QatarEnergy-family site is precisely when a certificate problem is still
+ * fixable — waiting until the machine is on site defeats the point.
  */
 
 type DocumentLike = {
@@ -57,7 +61,7 @@ export function getContractWarnings(
   ]
 
   for (const assignment of contract.equipmentAssignments) {
-    if (!isAssignmentActiveOn(assignment)) continue
+    if (hasAssignmentEnded(assignment)) continue
 
     const { equipment } = assignment
 
@@ -78,7 +82,7 @@ export function getContractWarnings(
   }
 
   for (const assignment of contract.operatorAssignments) {
-    if (!isAssignmentActiveOn(assignment)) continue
+    if (hasAssignmentEnded(assignment)) continue
     if (!assignment.operator) continue
 
     warnings.push(
@@ -89,9 +93,9 @@ export function getContractWarnings(
   return warnings
 }
 
-/** Current equipment assignments — what the master view card shows. */
-export function currentEquipment<T extends { startDate: Date; endDate: Date | null }>(
+/** Running or scheduled — what the master view card shows. */
+export function liveAssignments<T extends { startDate: Date; endDate: Date | null }>(
   assignments: T[],
 ): T[] {
-  return assignments.filter((assignment) => isAssignmentActiveOn(assignment))
+  return assignments.filter((assignment) => !hasAssignmentEnded(assignment))
 }

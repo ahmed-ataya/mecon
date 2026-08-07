@@ -5,7 +5,8 @@ import { useState } from 'react'
 import {
   CONTRACT_STATUS_CLASSES,
   CONTRACT_STATUS_LABELS,
-  isAssignmentActiveOn,
+  hasAssignmentEnded,
+  isAssignmentUpcoming,
   type ContractStatus,
 } from '@/lib/contract-status'
 import { formatDate } from '@/lib/dates'
@@ -67,11 +68,13 @@ export type ContractCardData = {
 export function ContractCard({ contract }: { contract: ContractCardData }) {
   const [showHistory, setShowHistory] = useState(false)
 
-  const currentEquipment = contract.equipmentAssignments.filter((assignment) =>
-    isAssignmentActiveOn(assignment),
+  // Not-ended rather than active-today, so an upcoming contract shows the
+  // machines scheduled onto it instead of claiming it has none.
+  const currentEquipment = contract.equipmentAssignments.filter(
+    (assignment) => !hasAssignmentEnded(assignment),
   )
-  const currentOperators = contract.operatorAssignments.filter((assignment) =>
-    isAssignmentActiveOn(assignment),
+  const currentOperators = contract.operatorAssignments.filter(
+    (assignment) => !hasAssignmentEnded(assignment),
   )
 
   const replacements =
@@ -122,7 +125,7 @@ export function ContractCard({ contract }: { contract: ContractCardData }) {
           </dt>
           <dd className="mt-1 space-y-1">
             {currentEquipment.length === 0 ? (
-              <span className="text-slate-400">None currently assigned</span>
+              <span className="text-slate-400">None assigned</span>
             ) : (
               currentEquipment.map((assignment) => (
                 <div
@@ -139,7 +142,8 @@ export function ContractCard({ contract }: { contract: ContractCardData }) {
                     ]?.toLowerCase() ?? assignment.rateType}
                   </span>
                   <span className="text-xs text-slate-400">
-                    since {formatDate(assignment.startDate)}
+                    {isAssignmentUpcoming(assignment) ? 'from' : 'since'}{' '}
+                    {formatDate(assignment.startDate)}
                   </span>
                 </div>
               ))
@@ -153,7 +157,7 @@ export function ContractCard({ contract }: { contract: ContractCardData }) {
           </dt>
           <dd className="mt-1 space-y-1">
             {currentOperators.length === 0 ? (
-              <span className="text-slate-400">None currently assigned</span>
+              <span className="text-slate-400">None assigned</span>
             ) : (
               currentOperators.map((assignment) => (
                 <div

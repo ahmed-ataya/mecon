@@ -69,6 +69,32 @@ export function isAssignmentActiveOn(
   return true
 }
 
+/**
+ * Has this assignment finished? Anything not finished is either running now or
+ * scheduled to start.
+ *
+ * Warnings and the "what is on this contract" views key off THIS, not off
+ * isAssignmentActiveOn. An upcoming contract's machine has a start date in the
+ * future, so an "active today" test reports the contract as having nothing on
+ * it and suppresses every warning about it — the certificate problem would
+ * then surface on the mobilization date itself, far too late to renew
+ * anything. Before mobilization is exactly when the warning is useful.
+ */
+export function hasAssignmentEnded(
+  assignment: AssignmentLike,
+  date: Date = todayUtc(),
+): boolean {
+  return !!assignment.endDate && assignment.endDate.getTime() < date.getTime()
+}
+
+/** Scheduled but not started yet — shown as "planned" rather than "current". */
+export function isAssignmentUpcoming(
+  assignment: AssignmentLike,
+  date: Date = todayUtc(),
+): boolean {
+  return assignment.startDate.getTime() > date.getTime()
+}
+
 /** Do two assignment periods overlap at all? Used for the double-booking check. */
 export function assignmentsOverlap(
   a: AssignmentLike,
