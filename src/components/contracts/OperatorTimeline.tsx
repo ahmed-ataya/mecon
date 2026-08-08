@@ -32,8 +32,8 @@ export type OperatorAssignmentRow = {
   reason: string
   note: string | null
   arrangement: string
-  operatorCost: number | null
-  operatorRebill: number | null
+  operatorHourlyCost: number | null
+  operatorHourlyRebill: number | null
   operator: { id: string; name: string } | null
 }
 
@@ -69,8 +69,9 @@ export function OperatorTimeline({
           // Replaceable while it is running or still to come — not once ended.
           const current = !ended
           const margin =
-            assignment.operatorRebill !== null && assignment.operatorCost !== null
-              ? assignment.operatorRebill - assignment.operatorCost
+            assignment.operatorHourlyRebill !== null &&
+            assignment.operatorHourlyCost !== null
+              ? assignment.operatorHourlyRebill - assignment.operatorHourlyCost
               : null
 
           return (
@@ -119,11 +120,11 @@ export function OperatorTimeline({
                       : 'ongoing'}
                   </p>
 
-                  {(assignment.operatorCost !== null ||
-                    assignment.operatorRebill !== null) && (
+                  {(assignment.operatorHourlyCost !== null ||
+                    assignment.operatorHourlyRebill !== null) && (
                     <p className="mt-1 text-xs text-slate-500">
-                      Cost {formatQar(assignment.operatorCost)} · Rebill{' '}
-                      {formatQar(assignment.operatorRebill)}
+                      Cost {formatQar(assignment.operatorHourlyCost)}/hr · Rebill{' '}
+                      {formatQar(assignment.operatorHourlyRebill)}/hr
                       {margin !== null && (
                         <span
                           className={
@@ -131,7 +132,7 @@ export function OperatorTimeline({
                           }
                         >
                           {' · margin '}
-                          {formatQar(margin)}
+                          {formatQar(margin)}/hr
                         </span>
                       )}
                     </p>
@@ -174,8 +175,8 @@ export function OperatorTimeline({
                     operatorOptions={operatorOptions}
                     defaultArrangement={assignment.arrangement as Arrangement}
                     defaultReason="SICK_INJURED"
-                    defaultCost={assignment.operatorCost}
-                    defaultRebill={assignment.operatorRebill}
+                    defaultHourlyCost={assignment.operatorHourlyCost}
+                    defaultHourlyRebill={assignment.operatorHourlyRebill}
                     minDate={assignment.startDate}
                     submitLabel="Replace operator"
                     onDone={() => setReplacing(null)}
@@ -196,8 +197,8 @@ function OperatorAssignmentForm({
   operatorOptions,
   defaultArrangement,
   defaultReason,
-  defaultCost,
-  defaultRebill,
+  defaultHourlyCost,
+  defaultHourlyRebill,
   minDate,
   submitLabel,
   onDone,
@@ -209,8 +210,8 @@ function OperatorAssignmentForm({
   operatorOptions: PartyOption[]
   defaultArrangement: Arrangement
   defaultReason: string
-  defaultCost: number | null
-  defaultRebill: number | null
+  defaultHourlyCost: number | null
+  defaultHourlyRebill: number | null
   minDate?: Date
   submitLabel: string
   onDone: () => void
@@ -318,22 +319,22 @@ function OperatorAssignmentForm({
 
       {isMarket && (
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Operator cost (QAR)" htmlFor="operatorCost">
+          <Field label="Operator cost (QAR/hour)" htmlFor="operatorHourlyCost">
             <input
-              id="operatorCost"
-              name="operatorCost"
+              id="operatorHourlyCost"
+              name="operatorHourlyCost"
               inputMode="decimal"
-              defaultValue={toRiyalInput(defaultCost)}
+              defaultValue={toRiyalInput(defaultHourlyCost)}
               className={inputClass}
             />
           </Field>
 
-          <Field label="Operator rebill (QAR)" htmlFor="operatorRebill">
+          <Field label="Operator rebill (QAR/hour)" htmlFor="operatorHourlyRebill">
             <input
-              id="operatorRebill"
-              name="operatorRebill"
+              id="operatorHourlyRebill"
+              name="operatorHourlyRebill"
               inputMode="decimal"
-              defaultValue={toRiyalInput(defaultRebill)}
+              defaultValue={toRiyalInput(defaultHourlyRebill)}
               className={inputClass}
             />
           </Field>

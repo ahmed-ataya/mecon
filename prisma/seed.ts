@@ -530,9 +530,9 @@ async function main() {
           {
             equipmentId: jcb3cx.id,
             startDate: d('2026-07-15'),
-            rateType: 'PER_WORKING_HOUR',
-            // 137.50/hr — the decimal case that forced halala storage
-            rateAmount: 137_50,
+            rateType: 'PER_DAY',
+            // 1,375.50/day — the decimal case that forced halala storage
+            rateAmount: 1_375_50,
             reason: 'INITIAL',
           },
         ],
@@ -544,8 +544,9 @@ async function main() {
             arrangement: 'MARKET_OPERATOR',
             startDate: d('2026-07-15'),
             reason: 'INITIAL',
-            operatorCost: 4_200_00,
-            operatorRebill: 5_600_00,
+            // Per hour now, not per month
+            operatorHourlyCost: 52_50,
+            operatorHourlyRebill: 70_00,
           },
         ],
       },

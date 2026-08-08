@@ -305,8 +305,8 @@ export const operatorAssignmentSchema = z
     operatorId: optionalText,
     startDate: requiredDate('Start date'),
     reason: z.enum(OPERATOR_ASSIGNMENT_REASONS, { message: 'Select a reason' }),
-    operatorCost: moneyField('Operator cost'),
-    operatorRebill: moneyField('Operator rebill'),
+    operatorHourlyCost: moneyField('Operator hourly cost'),
+    operatorHourlyRebill: moneyField('Operator hourly rebill'),
     note: optionalText,
   })
   .refine(

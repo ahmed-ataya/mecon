@@ -166,13 +166,64 @@ export const SITE_REQUIRED_APPROVAL: Record<Site, ApprovalBody | null> = {
 
 // --- Contracts ------------------------------------------------------------
 
-export const RATE_TYPES = ['PER_DAY', 'PER_MONTH', 'PER_WORKING_HOUR'] as const
+/**
+ * Equipment rates only. There is no hourly rate for machines — that is an
+ * operator concept, and operators are priced per hour separately.
+ *
+ * Order matters: longest first. The billing warning compares the rate's unit
+ * against days actually worked, and "is this rate longer than the hire" is a
+ * position check in this list.
+ */
+export const RATE_TYPES = ['PER_MONTH', 'PER_WEEK', 'PER_DAY'] as const
 export type RateType = (typeof RATE_TYPES)[number]
 
 export const RATE_TYPE_LABELS: Record<RateType, string> = {
-  PER_DAY: 'Per day',
   PER_MONTH: 'Per month',
-  PER_WORKING_HOUR: 'Per working hour',
+  PER_WEEK: 'Per week',
+  PER_DAY: 'Per day',
+}
+
+/** Nominal days each rate covers — used to spot a rate longer than the hire. */
+export const RATE_TYPE_DAYS: Record<RateType, number> = {
+  PER_MONTH: 30,
+  PER_WEEK: 7,
+  PER_DAY: 1,
+}
+
+// --- Off hire -------------------------------------------------------------
+
+/**
+ * A machine on site but not billable. Taken from the red OFF HIRE rows on the
+ * master sheet — without it, invoices bill every calendar day and get disputed.
+ */
+export const OFF_HIRE_REASONS = [
+  'BREAKDOWN',
+  'CUSTOMER_STANDDOWN',
+  'AWAITING_ACCESS',
+  'WEATHER',
+  'OTHER',
+] as const
+export type OffHireReason = (typeof OFF_HIRE_REASONS)[number]
+
+export const OFF_HIRE_REASON_LABELS: Record<OffHireReason, string> = {
+  BREAKDOWN: 'Breakdown',
+  CUSTOMER_STANDDOWN: 'Customer stand-down',
+  AWAITING_ACCESS: 'Awaiting site access',
+  WEATHER: 'Weather',
+  OTHER: 'Other',
+}
+
+// --- Mobilization ---------------------------------------------------------
+
+/** Who physically moves the machine. */
+export const MOVED_BY = ['MECON', 'OUTSOURCED', 'CUSTOMER', 'SUPPLIER'] as const
+export type MovedBy = (typeof MOVED_BY)[number]
+
+export const MOVED_BY_LABELS: Record<MovedBy, string> = {
+  MECON: 'Mecon',
+  OUTSOURCED: 'Outsourced transporter',
+  CUSTOMER: 'Customer',
+  SUPPLIER: 'Cross-hire supplier',
 }
 
 // --- Assignments ----------------------------------------------------------

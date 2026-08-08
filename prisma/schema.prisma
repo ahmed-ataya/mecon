@@ -256,10 +256,14 @@ model Contract {
   /// outside this system for now. Mobilization charges will be read from it later.
   quotationRef String?
 
-  /// Who performs the mobilization — own yard, a transporter, the customer.
-  /// Free text, autocompleted from what has been used before, so an unlisted
-  /// hauler is never lost to an "Other" bucket.
+  /// Who performs the mobilization — free text, autocompleted from what has
+  /// been used before, so an unlisted hauler is never lost to an "Other" bucket.
   mobilizationBy String?
+
+  /// MECON | OUTSOURCED | CUSTOMER | SUPPLIER — see src/lib/enums.ts.
+  /// Kept alongside the name because "did we move it or did we pay someone"
+  /// is a cost question, and the name alone cannot answer it.
+  mobilizationParty String?
 
   /// FREE | CHARGED, or null to follow the duration rule automatically.
   ///
@@ -270,6 +274,39 @@ model Contract {
 
   /// Integer halalas. Known once the quotation is consulted; blank until then.
   mobilizationAmount Int?
+
+  /// Have WE settled the transporter's bill for mobilizing? This tracks money
+  /// going out, not what the customer owes — that lives on the invoice.
+  mobilizationPaid Boolean @default(false)
+
+  // --- De-mobilization ----------------------------------------------------
+  // A full mirror of mobilization. A machine coming off site is a real
+  // movement with its own cost, and on a cross hire it is a separate
+  // arrangement from the one that brought it in.
+
+  demobilizationDate   DateTime?
+  demobilizationBy     String?
+  demobilizationParty  String?
+  /// FREE | CHARGED, or null to follow the same duration rule as mobilization.
+  demobilizationCharge String?
+  /// Integer halalas
+  demobilizationAmount Int?
+  demobilizationPaid   Boolean   @default(false)
+
+  // --- Cross hire ---------------------------------------------------------
+
+  /// True when the machine is hired in from another supplier rather than
+  /// owned. It still needs an Equipment record so its certificates are
+  /// tracked, but the commercial arrangement is different: we pay the supplier
+  /// as well as billing the customer.
+  isCrossHire Boolean @default(false)
+
+  /// Who we hired it from. Free text — suppliers come and go.
+  crossHireSupplier String?
+
+  /// Integer halalas — what the supplier charges us, per the contract's
+  /// rateType. Stored so the margin against the customer rate is visible.
+  crossHireRate Int?
 
   // status is NOT stored — derived from mobilizationDate / closingDate so it
   // can never go stale. See src/lib/contract-status.ts
@@ -353,12 +390,40 @@ model EquipmentAssignment {
   note   String?
 
   invoiceLineItems InvoiceLineItem[]
+  offHirePeriods   OffHirePeriod[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([contractId])
   @@index([equipmentId])
+}
+
+/// A stretch where the machine was on site but NOT billable — breakdown,
+/// customer stand-down, waiting on access.
+///
+/// Taken from the red OFF HIRE rows on the master sheet. Without it an invoice
+/// bills every calendar day in the period, overcharges, and gets disputed —
+/// the exact outcome the one-invoice-per-machine rule exists to contain.
+/// Billing subtracts these days and shows the deduction rather than hiding it.
+model OffHirePeriod {
+  id                    String              @id @default(cuid())
+  equipmentAssignmentId String
+  equipmentAssignment   EquipmentAssignment @relation(fields: [equipmentAssignmentId], references: [id], onDelete: Cascade)
+
+  startDate DateTime
+  /// Null means still off hire
+  endDate   DateTime?
+
+  /// BREAKDOWN | CUSTOMER_STANDDOWN | AWAITING_ACCESS | WEATHER | OTHER
+  reason String
+
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([equipmentAssignmentId])
 }
 
 /// Same replacement rule as EquipmentAssignment. operatorId is null when the
@@ -387,11 +452,20 @@ model OperatorAssignment {
   /// | SCHEDULED_SWAP | OTHER
   reason String @default("INITIAL")
 
-  /// What we pay a subcontracted market operator, in integer halalas
-  operatorCost   Int?
-  /// What we charge the customer for that operator, in integer halalas.
-  /// Both are stored so margin stays visible.
-  operatorRebill Int?
+  /// Operators are priced PER HOUR, unlike machines. Both figures are integer
+  /// halalas per hour, and both are kept so margin stays visible.
+  operatorHourlyCost   Int?
+  operatorHourlyRebill Int?
+
+  /// Overtime is the same hourly rate times this factor. 1.25 is the usual
+  /// Qatar figure; it sits per assignment because it is negotiated per hire.
+  overtimeMultiplier Float @default(1.25)
+
+  /// The working-day assumption used until real timesheets arrive: a normal
+  /// day is 8 hours plus about 2 overtime. Both are per assignment so an
+  /// unusual hire is not forced into the standard shape.
+  normalHoursPerDay Float @default(8)
+  overtimeHoursPerDay Float @default(2)
 
   note String?
 

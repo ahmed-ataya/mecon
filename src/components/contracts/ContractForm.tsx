@@ -334,29 +334,29 @@ export function ContractForm({
         {isMarketOperator && (
           <div className="grid gap-5 sm:grid-cols-2">
             <Field
-              label="Operator cost (QAR)"
-              htmlFor="operatorCost"
-              hint="What we pay the subcontracted operator."
+              label="Operator cost (QAR/hour)"
+              htmlFor="operatorHourlyCost"
+              hint="Per hour. Overtime is this times the multiplier."
             >
               <input
-                id="operatorCost"
-                name="operatorCost"
+                id="operatorHourlyCost"
+                name="operatorHourlyCost"
                 inputMode="decimal"
-                defaultValue={values.operatorCost ?? ''}
+                defaultValue={values.operatorHourlyCost ?? ''}
                 className={inputClass}
               />
             </Field>
 
             <Field
-              label="Operator rebill (QAR)"
-              htmlFor="operatorRebill"
+              label="Operator rebill (QAR/hour)"
+              htmlFor="operatorHourlyRebill"
               hint="What we charge the customer. Both kept so margin is visible."
             >
               <input
-                id="operatorRebill"
-                name="operatorRebill"
+                id="operatorHourlyRebill"
+                name="operatorHourlyRebill"
                 inputMode="decimal"
-                defaultValue={values.operatorRebill ?? ''}
+                defaultValue={values.operatorHourlyRebill ?? ''}
                 className={inputClass}
               />
             </Field>
