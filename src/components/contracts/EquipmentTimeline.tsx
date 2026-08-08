@@ -15,7 +15,7 @@ import {
 } from '@/lib/enums'
 import { formatQar, toRiyalInput } from '@/lib/money'
 import type { EquipmentOption } from '@/lib/contract-options'
-import { addEquipmentAssignment, replaceEquipment } from '@/lib/actions/contracts'
+import { replaceEquipment } from '@/lib/actions/contracts'
 import { Combobox } from '@/components/ui/Combobox'
 import {
   Field,
@@ -45,57 +45,24 @@ export type EquipmentAssignmentRow = {
  * given day. That is what phase 3 bills from.
  */
 export function EquipmentTimeline({
-  contractId,
   assignments,
   equipmentOptions,
 }: {
-  contractId: string
   assignments: EquipmentAssignmentRow[]
   equipmentOptions: EquipmentOption[]
 }) {
   const [replacing, setReplacing] = useState<string | null>(null)
-  const [adding, setAdding] = useState(false)
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h2 className="font-semibold">Equipment</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            {assignments.length}{' '}
-            {assignments.length === 1 ? 'assignment' : 'assignments'} on record
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            setAdding((open) => !open)
-            setReplacing(null)
-          }}
-          className={buttonSecondaryClass}
-        >
-          {adding ? 'Cancel' : 'Add machine'}
-        </button>
+      <div className="mb-4">
+        <h2 className="font-semibold">Machine</h2>
+        <p className="mt-0.5 text-sm text-slate-500">
+          {assignments.length}{' '}
+          {assignments.length === 1 ? 'assignment' : 'assignments'} on record —
+          one at a time, replaced as machines change
+        </p>
       </div>
-
-      {adding && (
-        <div className="mb-5 rounded-md border border-slate-200 p-4">
-          <p className="mb-3 text-sm font-medium text-slate-700">
-            Add another machine
-          </p>
-          <p className="mb-4 text-xs text-slate-500">
-            This runs alongside the existing machines. To swap one out instead,
-            use Replace on that row so its history is closed properly.
-          </p>
-          <AssignmentForm
-            action={addEquipmentAssignment.bind(null, contractId)}
-            equipmentOptions={equipmentOptions}
-            submitLabel="Add machine"
-            defaultReason="INITIAL"
-            onDone={() => setAdding(false)}
-          />
-        </div>
-      )}
 
       <ol className="space-y-3">
         {assignments.map((assignment) => {
@@ -166,7 +133,6 @@ export function EquipmentTimeline({
                       setReplacing((id) =>
                         id === assignment.id ? null : assignment.id,
                       )
-                      setAdding(false)
                     }}
                     className={buttonSecondaryClass}
                   >
@@ -193,7 +159,6 @@ export function EquipmentTimeline({
                     defaultRateType={assignment.rateType}
                     defaultRateAmount={assignment.rateAmount}
                     minDate={assignment.startDate}
-                    showCarryOperators
                     onDone={() => setReplacing(null)}
                   />
                 </div>
@@ -214,7 +179,6 @@ function AssignmentForm({
   defaultRateType,
   defaultRateAmount,
   minDate,
-  showCarryOperators,
   onDone,
 }: {
   action: (
@@ -227,8 +191,6 @@ function AssignmentForm({
   defaultRateType?: string
   defaultRateAmount?: number
   minDate?: Date
-  /** Offer to move operators tied to the outgoing machine onto the new one. */
-  showCarryOperators?: boolean
   onDone: () => void
 }) {
   const [state, formAction, pending] = useActionState(action, {})
@@ -336,26 +298,6 @@ function AssignmentForm({
       <Field label="Note" htmlFor="note">
         <input id="note" name="note" className={inputClass} />
       </Field>
-
-      {showCarryOperators && (
-        <label className="flex items-start gap-3 rounded-md bg-slate-50 px-4 py-3 ring-1 ring-inset ring-slate-200">
-          <input
-            type="checkbox"
-            name="carryOperators"
-            defaultChecked
-            className="mt-0.5 h-4 w-4 rounded border-slate-300"
-          />
-          <span className="text-sm">
-            <span className="font-medium text-slate-800">
-              Move operators to the new machine
-            </span>
-            <span className="mt-0.5 block text-xs text-slate-500">
-              Anyone currently recorded as running the outgoing machine will be
-              pointed at the replacement. Untick if the operator leaves with it.
-            </span>
-          </span>
-        </label>
-      )}
 
       <div className="flex gap-3">
         <button type="submit" disabled={pending} className={buttonPrimaryClass}>

@@ -6,7 +6,11 @@ import type { Contract } from '@prisma/client'
 import { SITES, SITE_LABELS } from '@/lib/enums'
 import { toDateInputValue } from '@/lib/dates'
 import { toRiyalInput } from '@/lib/money'
-import type { LocationOption, PartyOption } from '@/lib/contract-options'
+import type {
+  LocationOption,
+  LpoOption,
+  PartyOption,
+} from '@/lib/contract-options'
 import type { ActionState } from '@/lib/actions/contracts'
 import { Combobox } from '@/components/ui/Combobox'
 import {
@@ -16,6 +20,7 @@ import {
   buttonSecondaryClass,
   inputClass,
 } from '@/components/ui/form'
+import { MobilizationFields } from './MobilizationFields'
 import { WarningList } from './WarningList'
 
 /**
@@ -30,12 +35,16 @@ export function ContractDetailsForm({
   action,
   customers,
   locations,
+  lpos,
+  mobilizedByOptions,
   contract,
   cancelHref,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
   customers: PartyOption[]
   locations: LocationOption[]
+  lpos: LpoOption[]
+  mobilizedByOptions: { value: string; label: string }[]
   contract: Contract
   cancelHref: string
 }) {
@@ -56,7 +65,20 @@ export function ContractDetailsForm({
     if (siteRef.current) siteRef.current.value = siteRegime
   })
 
+  const [mobilizationDate, setMobilizationDate] = useState(
+    values.mobilizationDate ?? toDateInputValue(contract.mobilizationDate),
+  )
+  const [closingDate, setClosingDate] = useState(
+    values.closingDate ?? toDateInputValue(contract.closingDate),
+  )
+  const [mobilizationCharge, setMobilizationCharge] = useState(
+    values.mobilizationCharge ?? contract.mobilizationCharge ?? '',
+  )
+
   const selectedCustomer = customers.find((c) => c.value === customerId)
+  const lpoChoices = customerId
+    ? lpos.filter((lpo) => lpo.customerId === customerId)
+    : lpos
 
   return (
     <form action={formAction} className="space-y-6">
@@ -144,10 +166,8 @@ export function ContractDetailsForm({
               id="mobilizationDate"
               name="mobilizationDate"
               type="date"
-              defaultValue={
-                values.mobilizationDate ??
-                toDateInputValue(contract.mobilizationDate)
-              }
+              value={mobilizationDate}
+              onChange={(event) => setMobilizationDate(event.target.value)}
               className={inputClass}
             />
             {errors.mobilizationDate && (
@@ -166,9 +186,8 @@ export function ContractDetailsForm({
               id="closingDate"
               name="closingDate"
               type="date"
-              defaultValue={
-                values.closingDate ?? toDateInputValue(contract.closingDate)
-              }
+              value={closingDate}
+              onChange={(event) => setClosingDate(event.target.value)}
               className={inputClass}
             />
             {errors.closingDate && (
@@ -178,44 +197,38 @@ export function ContractDetailsForm({
         </div>
       </section>
 
+      <MobilizationFields
+        mobilizedByOptions={mobilizedByOptions}
+        mobilizationDate={mobilizationDate}
+        closingDate={closingDate}
+        charge={mobilizationCharge}
+        onChargeChange={setMobilizationCharge}
+        initial={{
+          quotationRef: values.quotationRef ?? contract.quotationRef ?? '',
+          mobilizationBy: values.mobilizationBy ?? contract.mobilizationBy ?? '',
+          mobilizationAmount:
+            values.mobilizationAmount ?? toRiyalInput(contract.mobilizationAmount),
+        }}
+        errors={errors}
+      />
+
       <section className="space-y-5 rounded-lg border border-slate-200 bg-white p-6">
-        <h2 className="font-semibold">LPO</h2>
-
-        <div className="grid gap-5 sm:grid-cols-3">
-          <Field label="LPO number" htmlFor="lpoNumber">
-            <input
-              id="lpoNumber"
-              name="lpoNumber"
-              defaultValue={values.lpoNumber ?? contract.lpoNumber ?? ''}
-              className={inputClass}
-            />
-          </Field>
-
-          <Field label="LPO validity" htmlFor="lpoValidity">
-            <input
-              id="lpoValidity"
-              name="lpoValidity"
-              type="date"
-              defaultValue={
-                values.lpoValidity ?? toDateInputValue(contract.lpoValidity)
-              }
-              className={inputClass}
-            />
-          </Field>
-
-          <Field label="LPO amount (QAR)" htmlFor="lpoAmount">
-            <input
-              id="lpoAmount"
-              name="lpoAmount"
-              inputMode="decimal"
-              defaultValue={values.lpoAmount ?? toRiyalInput(contract.lpoAmount)}
-              className={inputClass}
-            />
-            {errors.lpoAmount && (
-              <p className="mt-1 text-xs text-red-600">{errors.lpoAmount}</p>
-            )}
-          </Field>
+        <div>
+          <h2 className="font-semibold">LPO</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            A shared record — one LPO can cover several contracts.
+          </p>
         </div>
+
+        <Field label="LPO" htmlFor="lpoId">
+          <Combobox
+            name="lpoId"
+            options={lpoChoices}
+            defaultValue={values.lpoId ?? contract.lpoId ?? ''}
+            placeholder="Search this customer’s LPOs…"
+            emptyLabel="No LPOs for this customer yet"
+          />
+        </Field>
       </section>
 
       <WarningList

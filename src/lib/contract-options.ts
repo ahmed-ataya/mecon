@@ -1,4 +1,5 @@
 import { db } from './db'
+import { describeLpo } from './lpo'
 import { rollUpStatus, type DocumentStatus } from './document-status'
 import { SITES, SITE_LABELS, type Site } from './enums'
 import { documentWarnings, siteApprovalWarning, type Warning } from './warnings'
@@ -109,6 +110,51 @@ export async function loadLocationOptions(): Promise<LocationOption[]> {
   }
 
   return [...seen.values()]
+}
+
+export type LpoOption = {
+  value: string
+  label: string
+  sublabel?: string
+  customerId: string
+}
+
+/**
+ * LPOs available to put a contract on.
+ *
+ * The sublabel spells out amount and expiry, including when either is open, so
+ * the commercial basis is visible at the point of choosing rather than one
+ * click away.
+ */
+export async function loadLpoOptions(): Promise<LpoOption[]> {
+  const lpos = await db.lpo.findMany({
+    include: { customer: { select: { name: true } } },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  return lpos.map((lpo) => ({
+    value: lpo.id,
+    label: lpo.number,
+    sublabel: `${lpo.customer.name} · ${describeLpo(lpo)}`,
+    customerId: lpo.customerId,
+  }))
+}
+
+/** Everyone who has performed a mobilization before — grows with use. */
+export async function loadMobilizedByOptions(): Promise<
+  { value: string; label: string }[]
+> {
+  const rows = await db.contract.findMany({
+    where: { mobilizationBy: { not: null } },
+    select: { mobilizationBy: true },
+    distinct: ['mobilizationBy'],
+    orderBy: { mobilizationBy: 'asc' },
+  })
+
+  return rows
+    .map((row) => row.mobilizationBy!)
+    .filter((name) => name.trim() !== '')
+    .map((name) => ({ value: name, label: name }))
 }
 
 export async function loadOperatorOptions(): Promise<PartyOption[]> {

@@ -46,3 +46,6 @@ next-env.d.ts
 
 # uploaded document files (phase 4)
 /storage
+
+# database dumps — may contain real customer data, never commit
+/backups

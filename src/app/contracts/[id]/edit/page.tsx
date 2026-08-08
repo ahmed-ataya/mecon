@@ -6,6 +6,8 @@ import { updateContract } from '@/lib/actions/contracts'
 import {
   loadCustomerOptions,
   loadLocationOptions,
+  loadLpoOptions,
+  loadMobilizedByOptions,
 } from '@/lib/contract-options'
 
 export default async function EditContractPage({
@@ -15,11 +17,14 @@ export default async function EditContractPage({
 }) {
   const { id } = await params
 
-  const [contract, customers, locations] = await Promise.all([
-    db.contract.findUnique({ where: { id } }),
-    loadCustomerOptions(),
-    loadLocationOptions(),
-  ])
+  const [contract, customers, locations, lpos, mobilizedByOptions] =
+    await Promise.all([
+      db.contract.findUnique({ where: { id } }),
+      loadCustomerOptions(),
+      loadLocationOptions(),
+      loadLpoOptions(),
+      loadMobilizedByOptions(),
+    ])
 
   if (!contract) notFound()
 
@@ -36,7 +41,7 @@ export default async function EditContractPage({
           Edit contract
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Machines and operators are changed from the contract page, so their
+          The machine and operator are changed from the contract page, so their
           history is preserved. This form covers the project itself.
         </p>
       </div>
@@ -45,6 +50,8 @@ export default async function EditContractPage({
         action={updateContract.bind(null, id)}
         customers={customers}
         locations={locations}
+        lpos={lpos}
+        mobilizedByOptions={mobilizedByOptions}
         contract={contract}
         cancelHref={`/contracts/${id}`}
       />

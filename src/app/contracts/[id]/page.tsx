@@ -11,7 +11,17 @@ import {
 } from '@/lib/contract-status'
 import { formatDate } from '@/lib/dates'
 import { SITE_LABELS, type Site } from '@/lib/enums'
-import { formatQar } from '@/lib/money'
+import {
+  describeLpo,
+  getLpoOpenness,
+  LPO_OPENNESS_CLASSES,
+  LPO_OPENNESS_LABELS,
+} from '@/lib/lpo'
+import {
+  effectiveCharge,
+  explainCharge,
+  MOBILIZATION_CHARGE_LABELS,
+} from '@/lib/mobilization'
 import { EquipmentTimeline } from '@/components/contracts/EquipmentTimeline'
 import { OperatorTimeline } from '@/components/contracts/OperatorTimeline'
 import { WarningList } from '@/components/contracts/WarningList'
@@ -31,21 +41,6 @@ export default async function ContractDetailPage({
   ])
 
   if (!contract) notFound()
-
-  // Only machines actually on this contract can be picked as the one an
-  // operator runs — offering the whole yard would be meaningless here.
-  const machineChoices = [
-    ...new Map(
-      contract.equipmentAssignments.map((assignment) => [
-        assignment.equipment.id,
-        {
-          value: assignment.equipment.id,
-          label: assignment.equipment.name,
-          sublabel: assignment.equipment.type,
-        },
-      ]),
-    ).values(),
-  ]
 
   return (
     <div className="space-y-6">
@@ -117,28 +112,55 @@ export default async function ContractDetailPage({
               SITE_LABELS[contract.siteRegime as Site] ?? contract.siteRegime
             } certification applies`}
           />
-          <Detail label="LPO number" value={contract.lpoNumber || '—'} />
           <Detail
-            label="LPO validity"
-            value={
-              contract.lpoValidity ? formatDate(contract.lpoValidity) : '—'
-            }
+            label="Quotation"
+            value={contract.quotationRef || '—'}
+            hint="One quotation can cover several contracts"
           />
-          <Detail label="LPO amount" value={formatQar(contract.lpoAmount)} />
+          <Detail label="Mobilized by" value={contract.mobilizationBy || '—'} />
+          <Detail
+            label="Mobilization"
+            value={MOBILIZATION_CHARGE_LABELS[effectiveCharge(contract)]}
+            hint={explainCharge(contract)}
+          />
         </dl>
       </section>
 
+      <section className="rounded-lg border border-slate-200 bg-white p-6">
+        <h2 className="mb-4 font-semibold">LPO</h2>
+        {contract.lpo ? (
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <Link
+              href={`/lpos/${contract.lpo.id}`}
+              className="font-medium text-slate-900 hover:underline"
+            >
+              {contract.lpo.number}
+            </Link>
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs ring-1 ring-inset ${
+                LPO_OPENNESS_CLASSES[getLpoOpenness(contract.lpo)]
+              }`}
+            >
+              {LPO_OPENNESS_LABELS[getLpoOpenness(contract.lpo)]}
+            </span>
+            <span className="text-slate-500">{describeLpo(contract.lpo)}</span>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">
+            No LPO recorded yet. Contracts can be entered before the paperwork
+            arrives.
+          </p>
+        )}
+      </section>
+
       <EquipmentTimeline
-        contractId={contract.id}
         assignments={contract.equipmentAssignments}
         equipmentOptions={equipmentOptions}
       />
 
       <OperatorTimeline
-        contractId={contract.id}
         assignments={contract.operatorAssignments}
         operatorOptions={operatorOptions}
-        machineChoices={machineChoices}
       />
     </div>
   )

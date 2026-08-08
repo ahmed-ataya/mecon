@@ -5,6 +5,8 @@ import {
   loadCustomerOptions,
   loadEquipmentOptions,
   loadLocationOptions,
+  loadLpoOptions,
+  loadMobilizedByOptions,
   loadOperatorOptions,
 } from '@/lib/contract-options'
 
@@ -18,12 +20,15 @@ import {
 export const dynamic = 'force-dynamic'
 
 export default async function NewContractPage() {
-  const [customers, equipment, operators, locations] = await Promise.all([
-    loadCustomerOptions(),
-    loadEquipmentOptions(),
-    loadOperatorOptions(),
-    loadLocationOptions(),
-  ])
+  const [customers, equipment, operators, locations, lpos, mobilizedByOptions] =
+    await Promise.all([
+      loadCustomerOptions(),
+      loadEquipmentOptions(),
+      loadOperatorOptions(),
+      loadLocationOptions(),
+      loadLpoOptions(),
+      loadMobilizedByOptions(),
+    ])
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -38,8 +43,9 @@ export default async function NewContractPage() {
           New contract
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          A contract belongs to a project. Machines and operators are assigned
-          underneath it and can change without affecting the contract itself.
+One contract per machine — three machines on a job means three contracts.
+          The machine and operator sit underneath and can change without
+          affecting the contract itself.
         </p>
       </div>
 
@@ -49,6 +55,8 @@ export default async function NewContractPage() {
         equipment={equipment}
         operators={operators}
         locations={locations}
+        lpos={lpos}
+        mobilizedByOptions={mobilizedByOptions}
         cancelHref="/contracts"
       />
     </div>

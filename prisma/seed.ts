@@ -46,6 +46,7 @@ async function main() {
   await db.equipmentAssignment.deleteMany()
   await db.operatorAssignment.deleteMany()
   await db.contract.deleteMany()
+  await db.lpo.deleteMany()
   await db.documentApproval.deleteMany()
   await db.document.deleteMany()
   await db.customer.deleteMany()
@@ -400,18 +401,51 @@ async function main() {
     },
   })
 
+  // --- LPOs ---------------------------------------------------------------
+
+  // One LPO commonly covers several machines. Each machine is its own
+  // contract, and they all point back at the same LPO record.
+  const lpoQatariDiar = await db.lpo.create({
+    data: {
+      customerId: qatariDiar.id,
+      number: 'LPO-2026-4471',
+      amount: 45_000_00, // halalas
+      validity: d('2026-09-15'), // expiring soon — amber
+    },
+  })
+
+  // An OPEN LPO: no ceiling and no expiry were agreed. Blank is deliberate.
+  const lpoAlBandary = await db.lpo.create({
+    data: {
+      customerId: alBandary.id,
+      number: 'LPO-2026-3980',
+      amount: null,
+      validity: null,
+      notes: 'Open running order — no ceiling or expiry agreed.',
+    },
+  })
+
+  // Open expiry only: a ceiling was agreed, but no end date.
+  const lpoMidmac = await db.lpo.create({
+    data: {
+      customerId: midmac.id,
+      number: 'LPO-2026-5120',
+      amount: 200_000_00,
+      validity: null,
+    },
+  })
+
   // --- Contracts ----------------------------------------------------------
 
-  // The scenario from the spec, seeded so the replacement rule is visible
-  // without anyone having to recreate it by hand:
+  // The scenario from the spec, seeded so the replacement rule is visible:
   //
   //   CAT 320 #4 mobilizes 1 Aug and starts working 2 Aug.
   //   On 7 Aug it breaks down and is replaced.
   //   Komatsu WA380 #2 starts 8 Aug.
   //
-  // ONE contract, TWO equipment assignments. The mobilization date never
-  // moved, and neither assignment was overwritten, so billing stays continuous
-  // across the swap.
+  // ONE contract, ONE machine at a time, TWO assignments. The mobilization
+  // date never moved and neither assignment was overwritten, so billing stays
+  // continuous across the swap.
   const breakdown = await db.contract.create({
     data: {
       customerId: qatariDiar.id,
@@ -419,9 +453,10 @@ async function main() {
       siteName: 'Lusail Boulevard',
       siteRegime: 'QATAR_ENERGY',
       mobilizationDate: d('2026-08-01'),
-      lpoNumber: 'LPO-2026-4471',
-      lpoValidity: d('2026-09-15'), // expiring soon — amber on the card
-      lpoAmount: 45_000_00, // halalas
+      lpoId: lpoQatariDiar.id,
+      quotationRef: 'QT-2026-118',
+      mobilizationBy: 'Own yard',
+      // Ongoing, so the duration rule makes mobilization free of charge.
       equipmentAssignments: {
         create: [
           {
@@ -456,18 +491,17 @@ async function main() {
     },
   })
 
-  // A second contract, ongoing, with a market operator so the cost/rebill
-  // margin has something to show.
+  // Two machines on one job = TWO contracts, sharing one open LPO.
   await db.contract.create({
     data: {
       customerId: alBandary.id,
-      projectName: 'Al Wakrah warehouse slab',
+      projectName: 'Al Wakrah warehouse slab — JCB',
       siteName: 'Al Wakrah Industrial Area',
       siteRegime: 'DOHA_GENERAL',
       mobilizationDate: d('2026-07-15'),
-      lpoNumber: 'LPO-2026-3980',
-      lpoValidity: d('2026-12-31'),
-      lpoAmount: 120_000_00,
+      lpoId: lpoAlBandary.id,
+      quotationRef: 'QT-2026-092',
+      mobilizationBy: 'Al Nasr Transport',
       equipmentAssignments: {
         create: [
           {
@@ -477,14 +511,6 @@ async function main() {
             // 137.50/hr — the decimal case that forced halala storage
             rateAmount: 137_50,
             reason: 'INITIAL',
-          },
-          {
-            equipmentId: bobcatS570.id,
-            startDate: d('2026-07-20'),
-            rateType: 'PER_MONTH',
-            rateAmount: 8_500_00,
-            reason: 'CUSTOMER_REQUEST',
-            note: 'Second machine added at customer request.',
           },
         ],
       },
@@ -503,7 +529,45 @@ async function main() {
     },
   })
 
-  // An upcoming contract, so the Upcoming filter is not empty.
+  // Same job, same LPO, second machine — and a short hire, so the duration
+  // rule makes mobilization CHARGED rather than free.
+  await db.contract.create({
+    data: {
+      customerId: alBandary.id,
+      projectName: 'Al Wakrah warehouse slab — Bobcat',
+      siteName: 'Al Wakrah Industrial Area',
+      siteRegime: 'DOHA_GENERAL',
+      mobilizationDate: d('2026-07-20'),
+      closingDate: d('2026-08-05'), // under a month
+      lpoId: lpoAlBandary.id,
+      quotationRef: 'QT-2026-092',
+      mobilizationBy: 'Al Nasr Transport',
+      mobilizationAmount: 1_800_00,
+      equipmentAssignments: {
+        create: [
+          {
+            equipmentId: bobcatS570.id,
+            startDate: d('2026-07-20'),
+            rateType: 'PER_MONTH',
+            rateAmount: 8_500_00,
+            reason: 'INITIAL',
+          },
+        ],
+      },
+      operatorAssignments: {
+        create: [
+          {
+            arrangement: 'WITHOUT_OPERATOR',
+            startDate: d('2026-07-20'),
+            reason: 'INITIAL',
+          },
+        ],
+      },
+    },
+  })
+
+  // An upcoming contract, so the Upcoming filter is not empty — and its
+  // machine's certificate does not cover Ras Laffan.
   await db.contract.create({
     data: {
       customerId: midmac.id,
@@ -511,9 +575,9 @@ async function main() {
       siteName: 'Ras Laffan Industrial City',
       siteRegime: 'RAS_LAFFAN',
       mobilizationDate: d('2026-10-01'),
-      lpoNumber: 'LPO-2026-5120',
-      lpoValidity: d('2027-03-31'),
-      lpoAmount: 200_000_00,
+      lpoId: lpoMidmac.id,
+      quotationRef: 'QT-2026-140',
+      mobilizationBy: 'Own yard',
       equipmentAssignments: {
         create: [
           {
@@ -538,7 +602,8 @@ async function main() {
   })
 
   console.log('Seeded:')
-  console.log(`  contracts  3 (including ${breakdown.projectName})`)
+  console.log(`  lpos       3 (one open, one open-expiry)`)
+  console.log(`  contracts  4 (including ${breakdown.projectName})`)
   console.log(`  customers  ${[alBandary, qatariDiar, midmac].length}`)
   console.log(
     `  equipment  ${[cat320, komatsuWA380, jcb3cx, bobcatS570].length}`,
@@ -553,7 +618,8 @@ async function main() {
   console.log('Phase 2 scenarios:')
   console.log('  Lusail Boulevard — breakdown swap, 1 contract / 2 machines')
   console.log('  Ras Laffan pipe rack — CAT 320 #4 on a site its cert fails')
-  console.log('  Al Wakrah warehouse slab — 2 machines at once, 137.50/hr')
+  console.log('  Al Wakrah — 2 machines = 2 contracts sharing 1 open LPO')
+  console.log('  Al Wakrah Bobcat — under a month, so mobilization is CHARGED')
 }
 
 main()

@@ -1,9 +1,9 @@
 import { hasAssignmentEnded } from './contract-status'
 import type { Site } from './enums'
+import { lpoValidityWarnings } from './lpo'
 import {
   documentWarnings,
   doubleBookingWarning,
-  lpoWarnings,
   siteApprovalWarning,
   type Warning,
 } from './warnings'
@@ -32,8 +32,7 @@ type CertificateLike = DocumentLike & { approvedFor: { body: string }[] }
 export type ContractForWarnings = {
   siteName: string
   siteRegime: string
-  lpoNumber: string | null
-  lpoValidity: Date | null
+  lpo: { number: string; validity: Date | null } | null
   customer: { name: string; documents: DocumentLike[] }
   equipmentAssignments: {
     startDate: Date
@@ -58,7 +57,7 @@ export function getContractWarnings(
 ): Warning[] {
   const warnings: Warning[] = [
     ...documentWarnings(contract.customer.name, contract.customer.documents),
-    ...lpoWarnings(contract),
+    ...lpoValidityWarnings(contract.lpo),
   ]
 
   for (const assignment of contract.equipmentAssignments) {

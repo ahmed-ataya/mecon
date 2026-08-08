@@ -1,9 +1,5 @@
 import { daysUntil, formatDate } from './dates'
-import {
-  EXPIRING_SOON_DAYS,
-  getDocumentStatus,
-  type DocumentStatus,
-} from './document-status'
+import { getDocumentStatus, type DocumentStatus } from './document-status'
 import {
   SITE_LABELS,
   SITE_REQUIRED_APPROVAL,
@@ -157,48 +153,6 @@ export function siteApprovalWarning(
       ? `${equipmentName}: the only certificate approved for ${where} has expired.`
       : `${equipmentName}: 3rd party certificate is not approved for ${where}.`,
   }
-}
-
-// ---------------------------------------------------------------------------
-// LPO
-// ---------------------------------------------------------------------------
-
-/**
- * LPO validity. Consumption against lpoAmount arrives in phase 3, once there
- * are invoices to total.
- */
-export function lpoWarnings(contract: {
-  lpoNumber: string | null
-  lpoValidity: Date | null
-}): Warning[] {
-  if (!contract.lpoValidity) return []
-
-  const days = daysUntil(contract.lpoValidity)
-  const reference = contract.lpoNumber ? `LPO ${contract.lpoNumber}` : 'LPO'
-
-  if (days < 0) {
-    return [
-      {
-        code: 'LPO_EXPIRED',
-        severity: 'RED',
-        message: `${reference} expired ${formatDate(contract.lpoValidity)}.`,
-      },
-    ]
-  }
-
-  if (days <= EXPIRING_SOON_DAYS) {
-    return [
-      {
-        code: 'LPO_EXPIRING_SOON',
-        severity: 'AMBER',
-        message: `${reference} expires in ${days} day${
-          days === 1 ? '' : 's'
-        } (${formatDate(contract.lpoValidity)}).`,
-      },
-    ]
-  }
-
-  return []
 }
 
 // ---------------------------------------------------------------------------

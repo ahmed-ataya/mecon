@@ -10,6 +10,7 @@ import type { Warning } from './warnings'
  */
 export const contractInclude = {
   customer: { include: { documents: true } },
+  lpo: true,
   equipmentAssignments: {
     include: {
       equipment: { include: { documents: { include: { approvedFor: true } } } },
@@ -19,8 +20,6 @@ export const contractInclude = {
   operatorAssignments: {
     include: {
       operator: { include: { documents: true } },
-      // Which machine this operator runs, when the contract has several.
-      equipment: { select: { id: true, name: true } },
     },
     orderBy: { startDate: 'asc' },
   },

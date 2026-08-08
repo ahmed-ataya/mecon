@@ -20,6 +20,11 @@ import {
   type Site,
 } from '@/lib/enums'
 import { formatQar } from '@/lib/money'
+import { describeLpo } from '@/lib/lpo'
+import {
+  effectiveCharge,
+  MOBILIZATION_CHARGE_LABELS,
+} from '@/lib/mobilization'
 import { WARNING_CLASSES, worstSeverity, type Warning } from '@/lib/warnings'
 
 type Assignment = {
@@ -40,7 +45,6 @@ type OperatorAssignment = Assignment & {
   arrangement: string
   operatorRebill: number | null
   operator: { id: string; name: string } | null
-  equipment: { id: string; name: string } | null
 }
 
 export type ContractCardData = {
@@ -50,9 +54,10 @@ export type ContractCardData = {
   siteRegime: string
   mobilizationDate: Date
   closingDate: Date | null
-  lpoNumber: string | null
-  lpoValidity: Date | null
-  lpoAmount: number | null
+  quotationRef: string | null
+  mobilizationBy: string | null
+  mobilizationCharge: string | null
+  lpo: { id: string; number: string; amount: number | null; validity: Date | null } | null
   status: ContractStatus
   warnings: Warning[]
   customer: { id: string; name: string }
@@ -127,7 +132,7 @@ export function ContractCard({ contract }: { contract: ContractCardData }) {
 
         <div className="sm:col-span-2">
           <dt className="text-xs uppercase tracking-wide text-slate-500">
-            Equipment
+            Machine
           </dt>
           <dd className="mt-1 space-y-1">
             {currentEquipment.length === 0 ? (
@@ -177,11 +182,6 @@ export function ContractCard({ contract }: { contract: ContractCardData }) {
                     {ARRANGEMENT_LABELS[assignment.arrangement as Arrangement] ??
                       assignment.arrangement}
                   </span>
-                  {assignment.equipment && (
-                    <span className="text-xs text-slate-400">
-                      on {assignment.equipment.name}
-                    </span>
-                  )}
                   {assignment.operatorRebill !== null && (
                     <span className="text-xs text-slate-400">
                       rebill {formatQar(assignment.operatorRebill)}
@@ -194,23 +194,41 @@ export function ContractCard({ contract }: { contract: ContractCardData }) {
         </div>
 
         <div className="sm:col-span-2">
+          <dt className="text-xs uppercase tracking-wide text-slate-500">
+            Mobilization
+          </dt>
+          <dd className="mt-0.5 text-slate-900">
+            {MOBILIZATION_CHARGE_LABELS[effectiveCharge(contract)]}
+            {contract.mobilizationBy && (
+              <span className="text-slate-500">
+                {' · by '}
+                {contract.mobilizationBy}
+              </span>
+            )}
+            {contract.quotationRef && (
+              <span className="text-slate-500">
+                {' · quote '}
+                {contract.quotationRef}
+              </span>
+            )}
+          </dd>
+        </div>
+
+        <div className="sm:col-span-2">
           <dt className="text-xs uppercase tracking-wide text-slate-500">LPO</dt>
           <dd className="mt-0.5 text-slate-900">
-            {contract.lpoNumber ? (
+            {contract.lpo ? (
               <>
-                {contract.lpoNumber}
-                {contract.lpoAmount !== null && (
-                  <span className="text-slate-500">
-                    {' · '}
-                    {formatQar(contract.lpoAmount)}
-                  </span>
-                )}
-                {contract.lpoValidity && (
-                  <span className="text-slate-500">
-                    {' · valid to '}
-                    {formatDate(contract.lpoValidity)}
-                  </span>
-                )}
+                <Link
+                  href={`/lpos/${contract.lpo.id}`}
+                  className="hover:underline"
+                >
+                  {contract.lpo.number}
+                </Link>
+                <span className="text-slate-500">
+                  {' · '}
+                  {describeLpo(contract.lpo)}
+                </span>
               </>
             ) : (
               <span className="text-slate-400">Not recorded</span>

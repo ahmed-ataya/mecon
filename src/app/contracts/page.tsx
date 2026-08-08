@@ -55,7 +55,8 @@ export default async function ContractsPage({
         [
           contract.projectName,
           contract.customer.name,
-          contract.lpoNumber ?? '',
+          contract.lpo?.number ?? '',
+          contract.quotationRef ?? '',
           contract.siteName,
           SITE_LABELS[contract.siteRegime as Site] ?? contract.siteRegime,
           ...contract.equipmentAssignments.map((a) => a.equipment.name),

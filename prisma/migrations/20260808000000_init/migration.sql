@@ -82,13 +82,29 @@ CREATE TABLE "Contract" (
     "siteRegime" TEXT NOT NULL,
     "mobilizationDate" TIMESTAMP(3) NOT NULL,
     "closingDate" TIMESTAMP(3),
-    "lpoNumber" TEXT,
-    "lpoValidity" TIMESTAMP(3),
-    "lpoAmount" INTEGER,
+    "lpoId" TEXT,
+    "quotationRef" TEXT,
+    "mobilizationBy" TEXT,
+    "mobilizationCharge" TEXT,
+    "mobilizationAmount" INTEGER,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Contract_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Lpo" (
+    "id" TEXT NOT NULL,
+    "customerId" TEXT NOT NULL,
+    "number" TEXT NOT NULL,
+    "amount" INTEGER,
+    "validity" TIMESTAMP(3),
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Lpo_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -113,7 +129,6 @@ CREATE TABLE "OperatorAssignment" (
     "id" TEXT NOT NULL,
     "contractId" TEXT NOT NULL,
     "operatorId" TEXT,
-    "equipmentId" TEXT,
     "arrangement" TEXT NOT NULL,
     "startDate" TIMESTAMP(3) NOT NULL,
     "endDate" TIMESTAMP(3),
@@ -194,6 +209,9 @@ CREATE UNIQUE INDEX "DocumentApproval_documentId_body_key" ON "DocumentApproval"
 CREATE INDEX "Contract_customerId_idx" ON "Contract"("customerId");
 
 -- CreateIndex
+CREATE INDEX "Contract_lpoId_idx" ON "Contract"("lpoId");
+
+-- CreateIndex
 CREATE INDEX "Contract_siteRegime_idx" ON "Contract"("siteRegime");
 
 -- CreateIndex
@@ -201,6 +219,15 @@ CREATE INDEX "Contract_siteName_idx" ON "Contract"("siteName");
 
 -- CreateIndex
 CREATE INDEX "Contract_mobilizationDate_idx" ON "Contract"("mobilizationDate");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Lpo_number_key" ON "Lpo"("number");
+
+-- CreateIndex
+CREATE INDEX "Lpo_customerId_idx" ON "Lpo"("customerId");
+
+-- CreateIndex
+CREATE INDEX "Lpo_number_idx" ON "Lpo"("number");
 
 -- CreateIndex
 CREATE INDEX "EquipmentAssignment_contractId_idx" ON "EquipmentAssignment"("contractId");
@@ -213,9 +240,6 @@ CREATE INDEX "OperatorAssignment_contractId_idx" ON "OperatorAssignment"("contra
 
 -- CreateIndex
 CREATE INDEX "OperatorAssignment_operatorId_idx" ON "OperatorAssignment"("operatorId");
-
--- CreateIndex
-CREATE INDEX "OperatorAssignment_equipmentId_idx" ON "OperatorAssignment"("equipmentId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Invoice_invoiceNumber_key" ON "Invoice"("invoiceNumber");
@@ -245,6 +269,12 @@ ALTER TABLE "DocumentApproval" ADD CONSTRAINT "DocumentApproval_documentId_fkey"
 ALTER TABLE "Contract" ADD CONSTRAINT "Contract_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "Contract" ADD CONSTRAINT "Contract_lpoId_fkey" FOREIGN KEY ("lpoId") REFERENCES "Lpo"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Lpo" ADD CONSTRAINT "Lpo_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "EquipmentAssignment" ADD CONSTRAINT "EquipmentAssignment_contractId_fkey" FOREIGN KEY ("contractId") REFERENCES "Contract"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -255,9 +285,6 @@ ALTER TABLE "OperatorAssignment" ADD CONSTRAINT "OperatorAssignment_contractId_f
 
 -- AddForeignKey
 ALTER TABLE "OperatorAssignment" ADD CONSTRAINT "OperatorAssignment_operatorId_fkey" FOREIGN KEY ("operatorId") REFERENCES "Operator"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "OperatorAssignment" ADD CONSTRAINT "OperatorAssignment_equipmentId_fkey" FOREIGN KEY ("equipmentId") REFERENCES "Equipment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Invoice" ADD CONSTRAINT "Invoice_contractId_fkey" FOREIGN KEY ("contractId") REFERENCES "Contract"("id") ON DELETE CASCADE ON UPDATE CASCADE;

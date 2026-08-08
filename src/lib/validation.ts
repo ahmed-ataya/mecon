@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MOBILIZATION_CHARGES } from './mobilization'
 import {
   APPROVAL_BODIES,
   ARRANGEMENTS,
@@ -201,9 +202,21 @@ export const contractSchema = z
     siteRegime: z.enum(SITES, { message: 'Select which approval applies' }),
     mobilizationDate: requiredDate('Mobilization date'),
     closingDate: optionalDate,
-    lpoNumber: optionalText,
-    lpoValidity: optionalDate,
-    lpoAmount: moneyField('LPO amount'),
+    /** Null means "not on an LPO yet" — contracts can precede the paperwork. */
+    lpoId: optionalText,
+    quotationRef: optionalText,
+    mobilizationBy: optionalText,
+    /** Blank follows the duration rule — see src/lib/mobilization.ts */
+    mobilizationCharge: z
+      .string()
+      .trim()
+      .transform((value) => (value === '' ? null : value))
+      .nullable()
+      .refine(
+        (value) => value === null || MOBILIZATION_CHARGES.includes(value as 'FREE'),
+        { message: 'Choose free of charge or charged' },
+      ),
+    mobilizationAmount: moneyField('Mobilization amount'),
   })
   .refine(
     (data) =>
@@ -215,6 +228,23 @@ export const contractSchema = z
   )
 
 export type ContractInput = z.infer<typeof contractSchema>
+
+// --- LPO ------------------------------------------------------------------
+
+/**
+ * A blank amount or expiry is DELIBERATE — it records an open LPO, not an
+ * incomplete one. Neither is required, and src/lib/lpo.ts derives the type
+ * from which are missing.
+ */
+export const lpoSchema = z.object({
+  customerId: z.string().trim().min(1, 'Select a customer'),
+  number: z.string().trim().min(1, 'LPO number is required'),
+  amount: moneyField('LPO amount'),
+  validity: optionalDate,
+  notes: optionalText,
+})
+
+export type LpoInput = z.infer<typeof lpoSchema>
 
 // --- Assignments ----------------------------------------------------------
 
@@ -235,8 +265,6 @@ export const operatorAssignmentSchema = z
   .object({
     arrangement: z.enum(ARRANGEMENTS, { message: 'Select an arrangement' }),
     operatorId: optionalText,
-    /** Which machine this operator runs — optional, contracts vary. */
-    equipmentId: optionalText,
     startDate: requiredDate('Start date'),
     reason: z.enum(OPERATOR_ASSIGNMENT_REASONS, { message: 'Select a reason' }),
     operatorCost: moneyField('Operator cost'),

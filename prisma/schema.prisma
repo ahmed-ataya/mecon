@@ -42,6 +42,7 @@ model Customer {
 
   documents Document[]
   contracts Contract[]
+  lpos      Lpo[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -62,9 +63,8 @@ model Equipment {
   plateNumber  String?
   notes        String?
 
-  documents           Document[]
-  assignments         EquipmentAssignment[]
-  operatorAssignments OperatorAssignment[]
+  documents   Document[]
+  assignments EquipmentAssignment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -174,9 +174,15 @@ model DocumentApproval {
 // Contracts
 // ---------------------------------------------------------------------------
 
-/// A contract belongs to a PROJECT, never to a machine. mobilizationDate is
-/// fixed for the life of the contract. Equipment and operators come and go
-/// underneath it via assignments, so billing stays continuous across swaps.
+/// One contract per MACHINE. Three machines on a job means three contracts,
+/// which is how the business records them internally.
+///
+/// The contract still belongs to the project, not to a particular machine:
+/// mobilizationDate is fixed for its life, and the machine occupying the
+/// contract can be replaced underneath it via assignments, so billing stays
+/// continuous across a swap. Only ONE machine and ONE operator are assigned at
+/// a time — a second assignment always means a replacement, never a parallel
+/// machine.
 model Contract {
   id         String   @id @default(cuid())
   customerId String
@@ -208,10 +214,35 @@ model Contract {
   // run several machines at once at different rates, so a single contract-wide
   // rate cannot express the real agreement.
 
-  lpoNumber   String?
-  lpoValidity DateTime?
-  /// Integer halalas
-  lpoAmount   Int?
+  /// The LPO this contract draws on. A single LPO commonly covers several
+  /// machines, so it is a shared record rather than fields repeated on every
+  /// contract — otherwise the same LPO exists in three places that can drift
+  /// apart, and consumption cannot be totalled against the real limit.
+  /// Nullable: a contract can be recorded before its LPO arrives.
+  lpoId String?
+  lpo   Lpo?    @relation(fields: [lpoId], references: [id])
+
+  // --- Mobilization -------------------------------------------------------
+
+  /// The quotation this contract came from. One quotation often covers several
+  /// contracts, so this is a plain reference, not a link — quotations live
+  /// outside this system for now. Mobilization charges will be read from it later.
+  quotationRef String?
+
+  /// Who performs the mobilization — own yard, a transporter, the customer.
+  /// Free text, autocompleted from what has been used before, so an unlisted
+  /// hauler is never lost to an "Other" bucket.
+  mobilizationBy String?
+
+  /// FREE | CHARGED, or null to follow the duration rule automatically.
+  ///
+  /// The rule: a contract running a month or more mobilizes free of charge;
+  /// under a month it is charged. Stored only when someone overrides that,
+  /// so the normal case cannot go stale. See src/lib/mobilization.ts
+  mobilizationCharge String?
+
+  /// Integer halalas. Known once the quotation is consulted; blank until then.
+  mobilizationAmount Int?
 
   // status is NOT stored — derived from mobilizationDate / closingDate so it
   // can never go stale. See src/lib/contract-status.ts
@@ -224,16 +255,51 @@ model Contract {
   updatedAt DateTime @updatedAt
 
   @@index([customerId])
+  @@index([lpoId])
   @@index([siteRegime])
   @@index([siteName])
   @@index([mobilizationDate])
 }
 
+/// A Local Purchase Order from the customer.
+///
+/// Shared across contracts: one LPO commonly covers several machines, and each
+/// machine is its own contract. When more machines are mobilized later, the
+/// customer issues a NEW LPO for that machine or batch, which becomes another
+/// record here.
+///
+/// Type is NOT stored — an LPO is "open" when it has no amount ceiling and/or
+/// no expiry, which is exactly the absence of those values. Deriving it means
+/// the two can never disagree. See src/lib/lpo.ts
+model Lpo {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  number String @unique
+
+  /// Integer halalas. NULL means an open amount — no ceiling agreed.
+  amount Int?
+
+  /// NULL means an open expiry — no end date agreed.
+  validity DateTime?
+
+  notes String?
+
+  contracts Contract[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([number])
+}
+
 /// Never overwritten on replacement. To swap a machine: set endDate on the
 /// current row to the day before, then insert a new row.
 ///
-/// A contract may run several of these concurrently — a contract is not
-/// limited to one machine — and each carries its own rate.
+/// Only one is active at a time: a contract covers ONE machine. A second row
+/// always means a replacement, never a parallel machine.
 model EquipmentAssignment {
   id          String    @id @default(cuid())
   contractId  String
@@ -277,12 +343,11 @@ model OperatorAssignment {
   operatorId String?
   operator   Operator? @relation(fields: [operatorId], references: [id])
 
-  /// Which machine this operator runs, when the contract has several.
-  /// Nullable: an operator is not always tied to a specific machine, and
-  /// WITHOUT_OPERATOR rows never are. Points at the Equipment rather than at
-  /// one EquipmentAssignment so the link survives a machine being swapped.
-  equipmentId String?
-  equipment   Equipment? @relation(fields: [equipmentId], references: [id])
+  /// Which machine this operator ran is NOT stored here. The contract covers a
+  /// single machine, so it is already known — and a stored copy would drift out
+  /// of step the moment that machine was replaced. To answer "who was on this
+  /// JCB in March", find the contracts holding that machine and the operator
+  /// assignments whose dates overlap.
 
   /// WITH_OPERATOR | WITHOUT_OPERATOR | MARKET_OPERATOR
   arrangement String
@@ -310,7 +375,6 @@ model OperatorAssignment {
 
   @@index([contractId])
   @@index([operatorId])
-  @@index([equipmentId])
 }
 
 // ---------------------------------------------------------------------------

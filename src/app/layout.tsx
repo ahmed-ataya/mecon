@@ -11,6 +11,7 @@ export const metadata: Metadata = {
 // points at a page that does not exist yet.
 const NAV = [
   { href: '/contracts', label: 'Contracts' },
+  { href: '/lpos', label: 'LPOs' },
   { href: '/customers', label: 'Customers' },
   { href: '/equipment', label: 'Equipment' },
   { href: '/operators', label: 'Operators' },
