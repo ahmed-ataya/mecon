@@ -342,6 +342,10 @@ model Lpo {
 
   number String @unique
 
+  /// When the customer issued it ("PO Date" on the master sheet). Distinct
+  /// from validity, which is when it runs out.
+  issuedDate DateTime?
+
   /// Integer halalas. NULL means an open amount — no ceiling agreed.
   amount Int?
 

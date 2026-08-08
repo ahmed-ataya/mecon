@@ -46,6 +46,7 @@ export function LpoForm({
   const initial = {
     customerId: values.customerId ?? lpo?.customerId ?? '',
     number: values.number ?? lpo?.number ?? '',
+    issuedDate: values.issuedDate ?? toDateInputValue(lpo?.issuedDate),
     amount: values.amount ?? toRiyalInput(lpo?.amount),
     validity: values.validity ?? toDateInputValue(lpo?.validity),
     notes: values.notes ?? lpo?.notes ?? '',
@@ -90,6 +91,20 @@ export function LpoForm({
           )}
         </Field>
       </div>
+
+      <Field
+        label="Issued date"
+        htmlFor="issuedDate"
+        hint="“PO Date” on the master sheet — when the customer raised it."
+      >
+        <input
+          id="issuedDate"
+          name="issuedDate"
+          type="date"
+          defaultValue={initial.issuedDate}
+          className={inputClass}
+        />
+      </Field>
 
       <div className="grid gap-5 sm:grid-cols-2">
         <Field

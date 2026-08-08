@@ -95,6 +95,14 @@ export default async function LpoDetailPage({
           </div>
           <div>
             <dt className="text-xs uppercase tracking-wide text-slate-500">
+              Issued
+            </dt>
+            <dd className="mt-0.5 text-slate-900">
+              {lpo.issuedDate ? formatDate(lpo.issuedDate) : '—'}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-slate-500">
               Expiry
             </dt>
             <dd className="mt-0.5 text-slate-900">

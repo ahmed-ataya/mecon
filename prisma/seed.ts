@@ -173,6 +173,13 @@ async function main() {
           },
           {
             ownerType: 'EQUIPMENT',
+            documentType: 'Gate Pass',
+            documentNumber: 'GP-RL-40881',
+            issueDate: d('2026-02-22'),
+            expiryDate: d('2027-02-22'),
+          },
+          {
+            ownerType: 'EQUIPMENT',
             documentType: 'Insurance',
             documentNumber: 'EQINS-40122',
             issueDate: d('2025-11-01'),
@@ -432,6 +439,7 @@ async function main() {
     data: {
       customerId: qatariDiar.id,
       number: 'LPO-2026-4471',
+      issuedDate: d('2026-07-25'),
       amount: 45_000_00, // halalas
       validity: d('2026-09-15'), // expiring soon — amber
     },
@@ -442,6 +450,7 @@ async function main() {
     data: {
       customerId: alBandary.id,
       number: 'LPO-2026-3980',
+      issuedDate: d('2026-07-10'),
       amount: null,
       validity: null,
       notes: 'Open running order — no ceiling or expiry agreed.',
@@ -453,6 +462,7 @@ async function main() {
     data: {
       customerId: midmac.id,
       number: 'LPO-2026-5120',
+      issuedDate: d('2026-09-20'),
       amount: 200_000_00,
       validity: null,
     },

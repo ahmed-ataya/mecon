@@ -79,6 +79,9 @@ export const EQUIPMENT_DOCUMENT_TYPES = [
   '3rd Party Certificate',
   'Load Test Certificate',
   'Inspection Report',
+  // "Gate Pass Expiry Date" on the master sheet. A site pass expires like any
+  // other document, so it belongs here and gets the same warnings for free.
+  'Gate Pass',
   'Other',
 ] as const
 

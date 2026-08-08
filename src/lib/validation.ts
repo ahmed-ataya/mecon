@@ -277,6 +277,7 @@ export type ContractInput = z.infer<typeof contractSchema>
 export const lpoSchema = z.object({
   customerId: z.string().trim().min(1, 'Select a customer'),
   number: z.string().trim().min(1, 'LPO number is required'),
+  issuedDate: optionalDate,
   amount: moneyField('LPO amount'),
   validity: optionalDate,
   notes: optionalText,
