@@ -26,6 +26,29 @@ export const EQUIPMENT_TYPES = [
 ] as const
 export type EquipmentType = (typeof EQUIPMENT_TYPES)[number]
 
+/**
+ * Capacity units. Tonnage covers most of the fleet; metres exists because a
+ * telehandler is specified by reach ("17M") rather than by weight.
+ */
+export const CAPACITY_UNITS = [
+  'TON',
+  'METRE',
+  'KG',
+  'CBM',
+  'HP',
+  'OTHER',
+] as const
+export type CapacityUnit = (typeof CAPACITY_UNITS)[number]
+
+export const CAPACITY_UNIT_LABELS: Record<CapacityUnit, string> = {
+  TON: 'Ton',
+  METRE: 'Metre',
+  KG: 'kg',
+  CBM: 'm³',
+  HP: 'HP',
+  OTHER: 'Other',
+}
+
 // --- Operators ------------------------------------------------------------
 
 export const OPERATOR_SOURCES = ['IN_HOUSE', 'MARKET'] as const

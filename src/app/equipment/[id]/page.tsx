@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { db } from '@/lib/db'
+import { formatCapacity } from '@/lib/capacity'
 import { rollUpStatus, summarizeStatuses } from '@/lib/document-status'
 import {
   serializeDocument,
@@ -48,7 +49,15 @@ export default async function EquipmentDetailPage({
               </h1>
               <StatusBadge status={status} />
             </div>
-            <p className="mt-1 text-sm text-slate-500">{equipment.type}</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {[
+                equipment.type,
+                [equipment.brand, equipment.model].filter(Boolean).join(' '),
+                formatCapacity(equipment.capacityValue, equipment.capacityUnit),
+              ]
+                .filter((part) => part && part !== '—')
+                .join(' · ')}
+            </p>
           </div>
           <Link
             href={`/equipment/${equipment.id}/edit`}
@@ -86,9 +95,23 @@ export default async function EquipmentDetailPage({
 
       <section className="rounded-lg border border-slate-200 bg-white p-6">
         <h2 className="mb-4 font-semibold">Details</h2>
-        <dl className="grid gap-4 text-sm sm:grid-cols-2">
+        <dl className="grid gap-4 text-sm sm:grid-cols-3">
           <Detail label="Type" value={equipment.type} />
-          <Detail label="Plate number" value={equipment.plateNumber} />
+          <Detail label="Brand" value={equipment.brand} />
+          <Detail label="Model" value={equipment.model} />
+          <Detail
+            label="Capacity"
+            value={formatCapacity(equipment.capacityValue, equipment.capacityUnit)}
+          />
+          <Detail
+            label="Year of manufacture"
+            value={
+              equipment.yearOfManufacture
+                ? String(equipment.yearOfManufacture)
+                : null
+            }
+          />
+          <Detail label="Registration number" value={equipment.plateNumber} />
           <Detail label="Serial number" value={equipment.serialNumber} />
           <Detail label="Notes" value={equipment.notes} />
         </dl>

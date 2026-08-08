@@ -1,8 +1,10 @@
 import { z } from 'zod'
 import { MOBILIZATION_CHARGES } from './mobilization'
+import { parseCapacity } from './capacity'
 import {
   APPROVAL_BODIES,
   ARRANGEMENTS,
+  CAPACITY_UNITS,
   DOCUMENT_TYPES_BY_OWNER,
   EQUIPMENT_ASSIGNMENT_REASONS,
   EQUIPMENT_TYPES,
@@ -64,6 +66,42 @@ export type CustomerInput = z.infer<typeof customerSchema>
 export const equipmentSchema = z.object({
   name: z.string().trim().min(1, 'Unit label is required'),
   type: z.enum(EQUIPMENT_TYPES, { message: 'Select an equipment type' }),
+  brand: optionalText,
+  model: optionalText,
+  /** Year only — a full date would imply precision nobody records. */
+  yearOfManufacture: z
+    .string()
+    .trim()
+    .transform((value, ctx) => {
+      if (value === '') return null
+
+      const year = Number(value)
+      const thisYear = new Date().getUTCFullYear()
+
+      if (!Number.isInteger(year) || year < 1950 || year > thisYear + 1) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `Enter a year between 1950 and ${thisYear + 1}`,
+        })
+        return z.NEVER
+      }
+
+      return year
+    }),
+  capacityValue: z
+    .string()
+    .trim()
+    .transform((value, ctx) => {
+      const parsed = parseCapacity(value)
+
+      if (parsed === undefined) {
+        ctx.addIssue({ code: 'custom', message: 'Capacity must be a number' })
+        return z.NEVER
+      }
+
+      return parsed
+    }),
+  capacityUnit: z.enum(CAPACITY_UNITS, { message: 'Select a unit' }),
   serialNumber: optionalText,
   plateNumber: optionalText,
   notes: optionalText,

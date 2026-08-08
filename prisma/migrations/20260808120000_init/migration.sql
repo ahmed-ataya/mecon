@@ -20,6 +20,11 @@ CREATE TABLE "Equipment" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "type" TEXT NOT NULL,
+    "brand" TEXT,
+    "model" TEXT,
+    "yearOfManufacture" INTEGER,
+    "capacityValue" DOUBLE PRECISION,
+    "capacityUnit" TEXT,
     "serialNumber" TEXT,
     "plateNumber" TEXT,
     "notes" TEXT,
@@ -183,6 +188,9 @@ CREATE INDEX "Equipment_name_idx" ON "Equipment"("name");
 
 -- CreateIndex
 CREATE INDEX "Equipment_type_idx" ON "Equipment"("type");
+
+-- CreateIndex
+CREATE INDEX "Equipment_brand_idx" ON "Equipment"("brand");
 
 -- CreateIndex
 CREATE INDEX "Operator_name_idx" ON "Operator"("name");

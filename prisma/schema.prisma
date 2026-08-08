@@ -59,9 +59,35 @@ model Equipment {
   /// | Bulldozer | Crane | Dump Truck | Roller/Compactor | Forklift | Other
   type String
 
+  /// JCB, Caterpillar, Hitachi, DAEWOO, SUNWARD, Bomag…
+  brand String?
+
+  /// Manufacturer's model designation — "3DX PLUS", "ZX190X-5A", "226B3".
+  model String?
+
+  /// Year of manufacture. Int, not a date: only the year is ever known.
+  yearOfManufacture Int?
+
+  /// Capacity as a NUMBER plus its unit, not free text.
+  ///
+  /// It currently lives inside the equipment name on the master sheet
+  /// ("Boom Truck - 8.5Ton"), which makes "find me a 10 ton boom truck"
+  /// impossible to answer without reading every row. Split out, it can be
+  /// searched and compared. Float rather than Int because half-tonnes are
+  /// normal (8.5, 9.2, 10.2); this is a specification, not money.
+  capacityValue Float?
+
+  /// TON | METRE | KG | CBM | HP | OTHER — see src/lib/enums.ts.
+  /// Metres covers reach on a telehandler, where "17M" is the headline figure.
+  capacityUnit String?
+
+  /// Chassis / serial number
   serialNumber String?
-  plateNumber  String?
-  notes        String?
+
+  /// Registration number ("Reg. No." on the master sheet)
+  plateNumber String?
+
+  notes String?
 
   documents   Document[]
   assignments EquipmentAssignment[]
@@ -71,6 +97,7 @@ model Equipment {
 
   @@index([name])
   @@index([type])
+  @@index([brand])
 }
 
 model Operator {

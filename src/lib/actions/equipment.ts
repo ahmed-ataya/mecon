@@ -17,6 +17,11 @@ function readEquipmentForm(formData: FormData) {
   return {
     name: String(formData.get('name') ?? ''),
     type: String(formData.get('type') ?? ''),
+    brand: String(formData.get('brand') ?? ''),
+    model: String(formData.get('model') ?? ''),
+    yearOfManufacture: String(formData.get('yearOfManufacture') ?? ''),
+    capacityValue: String(formData.get('capacityValue') ?? ''),
+    capacityUnit: String(formData.get('capacityUnit') ?? 'TON'),
     serialNumber: String(formData.get('serialNumber') ?? ''),
     plateNumber: String(formData.get('plateNumber') ?? ''),
     notes: String(formData.get('notes') ?? ''),

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { db } from '@/lib/db'
+import { formatCapacity } from '@/lib/capacity'
 import { rollUpStatus, summarizeStatuses } from '@/lib/document-status'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { SearchInput } from '@/components/ui/SearchInput'
@@ -20,6 +21,8 @@ export default async function EquipmentPage({
             // Postgres LIKE is case-sensitive — see customers/page.tsx
             { name: { contains: query, mode: 'insensitive' } },
             { type: { contains: query, mode: 'insensitive' } },
+            { brand: { contains: query, mode: 'insensitive' } },
+            { model: { contains: query, mode: 'insensitive' } },
             { serialNumber: { contains: query, mode: 'insensitive' } },
             { plateNumber: { contains: query, mode: 'insensitive' } },
           ],
@@ -44,7 +47,7 @@ export default async function EquipmentPage({
         </Link>
       </div>
 
-      <SearchInput placeholder="Search by label, type, serial or plate…" />
+      <SearchInput placeholder="Search by label, type, brand, model, serial or reg. no…" />
 
       {equipment.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
@@ -61,7 +64,10 @@ export default async function EquipmentPage({
               <tr>
                 <th className="px-4 py-3 font-medium">Unit</th>
                 <th className="px-4 py-3 font-medium">Type</th>
-                <th className="px-4 py-3 font-medium">Plate</th>
+                <th className="px-4 py-3 font-medium">Brand / model</th>
+                <th className="px-4 py-3 font-medium">Capacity</th>
+                <th className="px-4 py-3 font-medium">Y-O-M</th>
+                <th className="px-4 py-3 font-medium">Reg. No.</th>
                 <th className="px-4 py-3 font-medium">Documents</th>
               </tr>
             </thead>
@@ -83,6 +89,17 @@ export default async function EquipmentPage({
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-slate-600">{machine.type}</td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {[machine.brand, machine.model]
+                        .filter(Boolean)
+                        .join(' ') || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {formatCapacity(machine.capacityValue, machine.capacityUnit)}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {machine.yearOfManufacture ?? '—'}
+                    </td>
                     <td className="px-4 py-3 text-slate-600">
                       {machine.plateNumber ?? '—'}
                     </td>

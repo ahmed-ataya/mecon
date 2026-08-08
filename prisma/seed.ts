@@ -9,7 +9,7 @@ import { db } from '../src/lib/db'
  *
  *   1. Al Bandary Contracting — Trade License expired 12 Jun 2026
  *   2. Rajesh Kumar — Medical Certificate expired 20 Jul 2026
- *   3. CAT 320 #4 — 3rd Party Certificate approved for General Doha only,
+ *   3. Wheel Excavator #4 — 3rd Party Certificate approved for General Doha only,
  *      so it fails the check on any QatarEnergy / Ras Laffan / Mesaieed site
  *
  * A couple of documents also sit inside the 30-day expiring-soon window so the
@@ -152,10 +152,15 @@ async function main() {
 
   const cat320 = await db.equipment.create({
     data: {
-      name: 'CAT 320 #4',
+      name: 'Wheel Excavator #4',
       type: 'Excavator',
-      serialNumber: 'CAT0320ELKGF04412',
-      plateNumber: '218844',
+      brand: 'Hitachi',
+      model: 'ZX190X-5A',
+      yearOfManufacture: 2022,
+      capacityValue: 19,
+      capacityUnit: 'TON',
+      serialNumber: 'HCM1UX00L00072875',
+      plateNumber: '72875',
       notes: 'General Doha work only until the certificate is re-issued.',
       documents: {
         create: [
@@ -191,10 +196,17 @@ async function main() {
 
   const komatsuWA380 = await db.equipment.create({
     data: {
-      name: 'Komatsu WA380 #2',
-      type: 'Wheel Loader',
-      serialNumber: 'KMTWA380A78N10233',
-      plateNumber: '304115',
+      name: 'Boom Truck 6x4 #2',
+      type: 'Crane',
+      brand: 'DAEWOO',
+      model: '10 Ton',
+      yearOfManufacture: 2019,
+      // Capacity split out of the name — the sheet writes this as
+      // "Boom Truck 6x4 - 9.4Ton (Hiab)".
+      capacityValue: 9.4,
+      capacityUnit: 'TON',
+      serialNumber: 'KL5DBH2AB9E003768',
+      plateNumber: '303768',
       notes: 'Cleared for QatarEnergy and Ras Laffan.',
       documents: {
         create: [
@@ -235,10 +247,15 @@ async function main() {
 
   const jcb3cx = await db.equipment.create({
     data: {
-      name: 'JCB 3CX #7',
+      name: 'Backhoe Loader + Hammer #1',
       type: 'Backhoe Loader (JCB)',
+      brand: 'JCB',
+      model: '3DX PLUS',
+      yearOfManufacture: 2022,
+      capacityValue: 4,
+      capacityUnit: 'TON',
       serialNumber: 'JCB3CX4TSJ2661077',
-      plateNumber: '277301',
+      plateNumber: '75786',
       documents: {
         create: [
           {
@@ -264,11 +281,17 @@ async function main() {
 
   const bobcatS570 = await db.equipment.create({
     data: {
-      name: 'Bobcat S570 #1',
-      type: 'Skid Steer (Bobcat)',
-      serialNumber: 'B5700N1A9M2288401',
-      plateNumber: '190228',
-      notes: 'Small footprint — used for interior and confined site work.',
+      name: 'Telehandler #1',
+      type: 'Other',
+      brand: 'JCB',
+      model: '540-170',
+      yearOfManufacture: 2023,
+      // Metres, not tonnes — a telehandler is specified by reach.
+      // The master sheet writes this as "Telehandler - 17M (4Ton)".
+      capacityValue: 17,
+      capacityUnit: 'METRE',
+      serialNumber: 'JCB5AAAGL02612991',
+      plateNumber: '76962',
       documents: {
         create: [
           {
@@ -439,9 +462,9 @@ async function main() {
 
   // The scenario from the spec, seeded so the replacement rule is visible:
   //
-  //   CAT 320 #4 mobilizes 1 Aug and starts working 2 Aug.
+  //   Wheel Excavator #4 mobilizes 1 Aug and starts working 2 Aug.
   //   On 7 Aug it breaks down and is replaced.
-  //   Komatsu WA380 #2 starts 8 Aug.
+  //   Boom Truck 6x4 #2 starts 8 Aug.
   //
   // ONE contract, ONE machine at a time, TWO assignments. The mobilization
   // date never moved and neither assignment was overwritten, so billing stays
@@ -474,7 +497,7 @@ async function main() {
             rateType: 'PER_DAY',
             rateAmount: 1_250_00,
             reason: 'BREAKDOWN_REPLACEMENT',
-            note: 'Replacement for CAT 320 #4.',
+            note: 'Replacement for Wheel Excavator #4.',
           },
         ],
       },
@@ -613,11 +636,11 @@ async function main() {
   console.log('Deliberate problems:')
   console.log('  Al Bandary Contracting — Trade License expired 12 Jun 2026')
   console.log('  Rajesh Kumar — Medical Certificate expired 20 Jul 2026')
-  console.log('  CAT 320 #4 — 3rd party cert approved for General Doha only')
+  console.log('  Wheel Excavator #4 — 3rd party cert approved for General Doha only')
   console.log('')
   console.log('Phase 2 scenarios:')
   console.log('  Lusail Boulevard — breakdown swap, 1 contract / 2 machines')
-  console.log('  Ras Laffan pipe rack — CAT 320 #4 on a site its cert fails')
+  console.log('  Ras Laffan pipe rack — Wheel Excavator #4 on a site its cert fails')
   console.log('  Al Wakrah — 2 machines = 2 contracts sharing 1 open LPO')
   console.log('  Al Wakrah Bobcat — under a month, so mobilization is CHARGED')
 }
