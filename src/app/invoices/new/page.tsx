@@ -19,6 +19,9 @@ export default async function NewInvoicePage() {
           include: { equipment: { select: { name: true } } },
           orderBy: { startDate: 'asc' },
         },
+        // What has already been billed, so the form can show what is left
+        // rather than making someone go and look it up on the contract.
+        invoices: { include: { invoice: true } },
       },
       orderBy: { mobilizationDate: 'desc' },
     }),
@@ -39,6 +42,41 @@ export default async function NewInvoicePage() {
         (assignment) => !hasAssignmentEnded(assignment),
       ) ?? contract.equipmentAssignments.at(-1)
 
+    // When the machine actually started, which is not the mobilization date:
+    // a machine mobilized on the 1st often starts working on the 2nd.
+    const starts = contract.equipmentAssignments.map((a) => a.startDate)
+    const workedFrom =
+      starts.length > 0
+        ? starts.reduce((min, date) => (date < min ? date : min))
+        : null
+
+    // Still running if any assignment is open. Otherwise the last end date,
+    // bounded by the contract's own closing date.
+    const stillRunning = contract.equipmentAssignments.some(
+      (a) => a.endDate === null,
+    )
+    const ends = contract.equipmentAssignments
+      .map((a) => a.endDate)
+      .filter((date): date is Date => date !== null)
+    const lastEnd =
+      ends.length > 0 ? ends.reduce((max, d) => (d > max ? d : max)) : null
+
+    let workedTo: Date | null = stillRunning ? null : lastEnd
+    if (contract.closingDate && (workedTo === null || workedTo > contract.closingDate)) {
+      workedTo = contract.closingDate
+    }
+
+    // Drafts count: a draft already covers its period, and generating the same
+    // month twice would silently double-bill once both were issued.
+    const periodEnds = contract.invoices.map((row) => row.invoice.periodEnd)
+    const invoicedThrough =
+      periodEnds.length > 0
+        ? periodEnds.reduce((max, d) => (d > max ? d : max))
+        : null
+    const hasDraft = contract.invoices.some(
+      (row) => row.invoice.status === 'DRAFT',
+    )
+
     return {
       id: contract.id,
       projectName: contract.projectName,
@@ -49,6 +87,10 @@ export default async function NewInvoicePage() {
       machineName: current?.equipment.name ?? null,
       mobilizationDate: contract.mobilizationDate,
       closingDate: contract.closingDate,
+      workedFrom,
+      workedTo,
+      invoicedThrough,
+      hasDraft,
     }
   })
 

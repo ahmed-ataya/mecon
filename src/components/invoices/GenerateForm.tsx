@@ -24,6 +24,45 @@ export type ContractChoice = {
   machineName: string | null
   mobilizationDate: Date
   closingDate: Date | null
+  /** When the machine actually started, which is not the mobilization date. */
+  workedFrom: Date | null
+  /** Null means still on hire. */
+  workedTo: Date | null
+  /** Latest period end already invoiced, drafts included. */
+  invoicedThrough: Date | null
+  hasDraft: boolean
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+function addDays(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * MS_PER_DAY)
+}
+
+function toInput(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
+function endOfMonth(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0))
+}
+
+/**
+ * The first day not yet billed on a contract.
+ *
+ * Null when the machine has never worked, or when everything up to the end of
+ * hire is already invoiced.
+ */
+function nextUninvoicedFrom(contract: ContractChoice): Date | null {
+  if (!contract.workedFrom) return null
+
+  const from = contract.invoicedThrough
+    ? addDays(contract.invoicedThrough, 1)
+    : contract.workedFrom
+
+  if (contract.workedTo && from > contract.workedTo) return null
+
+  return from
 }
 
 /**
@@ -55,6 +94,14 @@ export function GenerateForm({
   const [selected, setSelected] = useState<string[]>([])
   const [combine, setCombine] = useState(false)
 
+  // The dates are suggested from what has actually been billed, so nobody has
+  // to open the contract to find out where the last invoice stopped.
+  const [periodStart, setPeriodStart] = useState(
+    values.periodStart ?? defaultStart,
+  )
+  const [periodEnd, setPeriodEnd] = useState(values.periodEnd ?? defaultEnd)
+  const [touchedDates, setTouchedDates] = useState(false)
+
   const forCustomer = contracts.filter(
     (contract) => contract.customerId === customerId,
   )
@@ -64,11 +111,46 @@ export function GenerateForm({
   const mixedLpos = combine && lpoIds.length > 1
 
   function toggle(id: string) {
-    setSelected((current) =>
-      current.includes(id)
-        ? current.filter((value) => value !== id)
-        : [...current, id],
-    )
+    const next = selected.includes(id)
+      ? selected.filter((value) => value !== id)
+      : [...selected, id]
+
+    setSelected(next)
+
+    // Only suggest while the dates are untouched — once they have been edited
+    // by hand, moving them under the user would be worse than unhelpful.
+    if (touchedDates || next.length === 0) return
+
+    const starts = next
+      .map((contractId) => contracts.find((c) => c.id === contractId))
+      .filter((c): c is ContractChoice => !!c)
+      .map(nextUninvoicedFrom)
+      .filter((date): date is Date => date !== null)
+
+    if (starts.length === 0) return
+
+    const from = starts.reduce((min, date) => (date < min ? date : min))
+
+    // A month is the usual unit here, so suggest to the end of that month —
+    // clipped if the hire finished sooner.
+    const chosenContracts = next
+      .map((contractId) => contracts.find((c) => c.id === contractId))
+      .filter((c): c is ContractChoice => !!c)
+    const hireEnds = chosenContracts
+      .map((c) => c.workedTo)
+      .filter((date): date is Date => date !== null)
+
+    let to = endOfMonth(from)
+    if (
+      hireEnds.length === chosenContracts.length &&
+      hireEnds.length > 0
+    ) {
+      const lastEnd = hireEnds.reduce((max, d) => (d > max ? d : max))
+      if (lastEnd < to) to = lastEnd
+    }
+
+    setPeriodStart(toInput(from))
+    setPeriodEnd(toInput(to))
   }
 
   return (
@@ -94,13 +176,22 @@ export function GenerateForm({
           )}
         </Field>
 
+        <p className="rounded-md bg-slate-50 px-4 py-3 text-xs text-slate-600 ring-1 ring-inset ring-slate-200">
+          Pick the contracts below first — the dates fill in from where the last
+          invoice stopped. Change them here if you need something different.
+        </p>
+
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="Period start" htmlFor="periodStart">
             <input
               id="periodStart"
               name="periodStart"
               type="date"
-              defaultValue={values.periodStart ?? defaultStart}
+              value={periodStart}
+              onChange={(event) => {
+                setPeriodStart(event.target.value)
+                setTouchedDates(true)
+              }}
               className={inputClass}
             />
             {errors.periodStart && (
@@ -113,7 +204,11 @@ export function GenerateForm({
               id="periodEnd"
               name="periodEnd"
               type="date"
-              defaultValue={values.periodEnd ?? defaultEnd}
+              value={periodEnd}
+              onChange={(event) => {
+                setPeriodEnd(event.target.value)
+                setTouchedDates(true)
+              }}
               className={inputClass}
             />
             {errors.periodEnd && (
@@ -171,18 +266,57 @@ export function GenerateForm({
                   onChange={() => toggle(contract.id)}
                   className="mt-0.5 h-4 w-4 rounded border-slate-300"
                 />
-                <span className="min-w-0 text-sm">
+                <span className="min-w-0 flex-1 text-sm">
                   <span className="font-medium text-slate-900">
+                    {contract.machineName ?? 'No machine assigned'}
+                  </span>
+                  <span className="ml-2 text-xs text-slate-500">
                     {contract.projectName}
                   </span>
-                  <span className="mt-0.5 block text-xs text-slate-500">
-                    {contract.machineName ?? 'No machine assigned'} ·{' '}
-                    {contract.siteName} · mobilized{' '}
-                    {formatDate(contract.mobilizationDate)}
-                    {contract.lpoNumber
-                      ? ` · LPO ${contract.lpoNumber}`
-                      : ' · no LPO'}
+
+                  <span className="mt-1 block text-xs text-slate-600">
+                    {contract.workedFrom ? (
+                      <>
+                        <span className="font-medium">On hire</span>{' '}
+                        {formatDate(contract.workedFrom)} –{' '}
+                        {contract.workedTo
+                          ? formatDate(contract.workedTo)
+                          : 'ongoing'}
+                      </>
+                    ) : (
+                      <span className="text-slate-400">
+                        No machine assigned yet
+                      </span>
+                    )}
                   </span>
+
+                  <span className="mt-0.5 block text-xs">
+                    {contract.invoicedThrough ? (
+                      <span className="text-slate-500">
+                        Invoiced to {formatDate(contract.invoicedThrough)}
+                        {contract.hasDraft && (
+                          <span className="ml-1 text-amber-700">
+                            (includes a draft)
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">Never invoiced</span>
+                    )}
+                  </span>
+
+                  {(() => {
+                    const from = nextUninvoicedFrom(contract)
+                    return from ? (
+                      <span className="mt-0.5 block text-xs font-medium text-green-700">
+                        Not yet billed from {formatDate(from)}
+                      </span>
+                    ) : contract.workedFrom ? (
+                      <span className="mt-0.5 block text-xs text-slate-400">
+                        Fully invoiced
+                      </span>
+                    ) : null
+                  })()}
                 </span>
               </label>
             ))}
