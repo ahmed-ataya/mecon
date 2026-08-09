@@ -16,7 +16,10 @@ export default async function NewInvoicePage() {
       include: {
         lpo: { select: { number: true } },
         equipmentAssignments: {
-          include: { equipment: { select: { name: true } } },
+          include: {
+            equipment: { select: { name: true } },
+            offHirePeriods: true,
+          },
           orderBy: { startDate: 'asc' },
         },
         // What has already been billed, so the form can show what is left
@@ -91,6 +94,14 @@ export default async function NewInvoicePage() {
       workedTo,
       invoicedThrough,
       hasDraft,
+      // Drawn in red on the bar — never billable, so it must be visible next
+      // to the days that are.
+      offHire: contract.equipmentAssignments.flatMap((assignment) =>
+        assignment.offHirePeriods.map((period) => ({
+          startDate: period.startDate,
+          endDate: period.endDate,
+        })),
+      ),
     }
   })
 

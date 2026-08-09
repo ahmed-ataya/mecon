@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import { formatDate } from '@/lib/dates'
 import { Combobox } from '@/components/ui/Combobox'
+import { HireBar, HireScale } from './HireBar'
 import {
   Field,
   FormError,
@@ -31,6 +32,7 @@ export type ContractChoice = {
   /** Latest period end already invoiced, drafts included. */
   invoicedThrough: Date | null
   hasDraft: boolean
+  offHire: { startDate: Date; endDate: Date | null }[]
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
@@ -104,6 +106,35 @@ export function GenerateForm({
 
   const forCustomer = contracts.filter(
     (contract) => contract.customerId === customerId,
+  )
+
+  // One scale for every bar on screen, so two machines can be compared by eye.
+  // Padded to whole months, and always wide enough to show the chosen period.
+  const anchors: Date[] = []
+  for (const contract of forCustomer) {
+    if (contract.workedFrom) anchors.push(contract.workedFrom)
+    if (contract.workedTo) anchors.push(contract.workedTo)
+    if (contract.invoicedThrough) anchors.push(contract.invoicedThrough)
+  }
+  const selStart = periodStart ? new Date(`${periodStart}T00:00:00.000Z`) : null
+  const selEnd = periodEnd ? new Date(`${periodEnd}T00:00:00.000Z`) : null
+  if (selStart) anchors.push(selStart)
+  if (selEnd) anchors.push(selEnd)
+
+  const earliest =
+    anchors.length > 0
+      ? anchors.reduce((min, d) => (d < min ? d : min))
+      : new Date()
+  const latest =
+    anchors.length > 0
+      ? anchors.reduce((max, d) => (d > max ? d : max))
+      : new Date()
+
+  const rangeStart = new Date(
+    Date.UTC(earliest.getUTCFullYear(), earliest.getUTCMonth(), 1),
+  )
+  const rangeEnd = new Date(
+    Date.UTC(latest.getUTCFullYear(), latest.getUTCMonth() + 1, 0),
   )
 
   const chosen = forCustomer.filter((contract) => selected.includes(contract.id))
@@ -253,6 +284,29 @@ export function GenerateForm({
           </p>
         ) : (
           <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-4 rounded-sm bg-green-400" />
+                Not yet billed
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-4 rounded-sm bg-slate-400" />
+                Already invoiced
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-4 rounded-sm bg-red-400" />
+                Off hire
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-4 rounded-sm border-x-2 border-slate-900 bg-slate-900/10" />
+                This invoice
+              </span>
+            </div>
+
+            <div className="pl-7 pr-1">
+              <HireScale rangeStart={rangeStart} rangeEnd={rangeEnd} />
+            </div>
+
             {forCustomer.map((contract) => (
               <label
                 key={contract.id}
@@ -317,6 +371,19 @@ export function GenerateForm({
                       </span>
                     ) : null
                   })()}
+
+                  <span className="mt-2 block">
+                    <HireBar
+                      rangeStart={rangeStart}
+                      rangeEnd={rangeEnd}
+                      workedFrom={contract.workedFrom}
+                      workedTo={contract.workedTo}
+                      invoicedThrough={contract.invoicedThrough}
+                      offHire={contract.offHire}
+                      periodStart={selStart}
+                      periodEnd={selEnd}
+                    />
+                  </span>
                 </span>
               </label>
             ))}

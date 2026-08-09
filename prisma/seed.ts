@@ -544,6 +544,18 @@ async function main() {
             // 1,375.50/day — the decimal case that forced halala storage
             rateAmount: 1_375_50,
             reason: 'INITIAL',
+            // On site but not billable — the red stretch on the hire bar, and
+            // four days deducted from the July invoice.
+            offHirePeriods: {
+              create: [
+                {
+                  startDate: d('2026-07-25'),
+                  endDate: d('2026-07-28'),
+                  reason: 'BREAKDOWN',
+                  note: 'Hydraulic hose failure, awaiting parts.',
+                },
+              ],
+            },
           },
         ],
       },
@@ -654,6 +666,7 @@ async function main() {
   console.log('  Ras Laffan pipe rack — Wheel Excavator #4 on a site its cert fails')
   console.log('  Al Wakrah — 2 machines = 2 contracts sharing 1 open LPO')
   console.log('  Al Wakrah Bobcat — under a month, so mobilization is CHARGED')
+  console.log('  JCB off hire 25–28 Jul — deducted from billing, red on the bar')
 }
 
 main()
