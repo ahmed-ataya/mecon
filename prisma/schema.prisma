@@ -493,6 +493,10 @@ model Invoice {
 
   invoiceNumber String @unique
 
+  /// "D.N. NO." on the printed form — the delivery note this invoice refers
+  /// to. Entered by hand; delivery notes live outside this system.
+  deliveryNoteNumber String?
+
   periodStart DateTime
   periodEnd   DateTime
 
@@ -524,10 +528,16 @@ model InvoiceLineItem {
   invoiceId String
   invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
-  /// EQUIPMENT | OPERATOR_REBILL | OTHER
+  /// EQUIPMENT | OPERATOR_REBILL | MOBILIZATION | DEMOBILIZATION | OTHER
   kind String
 
+  /// The "PARTICULARS" column on the printed form.
   description String
+
+  /// The "UOM" column — Day / Week / Month / Hour / Lump sum. Stored on the
+  /// line rather than derived, because an invoice must still print correctly
+  /// years later even if the contract's rate type has since been changed.
+  uom String
 
   /// Traceability back to the assignment history this line was derived from
   equipmentAssignmentId String?
