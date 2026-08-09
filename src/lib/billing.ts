@@ -158,14 +158,34 @@ function rateTierWarning(
   }
 }
 
+type MobilizationLike = {
+  mobilizationCharge: string | null
+  mobilizationAmount: number | null
+  demobilizationCharge: string | null
+  demobilizationAmount: number | null
+}
+
 export function buildProposal({
   period,
   equipmentAssignments,
   operatorAssignments,
+  mobilization,
+  includeMobilization = false,
+  includeDemobilization = false,
 }: {
   period: Period
   equipmentAssignments: EquipmentAssignmentLike[]
   operatorAssignments: OperatorAssignmentLike[]
+  mobilization?: MobilizationLike
+  /**
+   * Mobilization normally lands on the FIRST invoice for a contract and
+   * de-mobilization on the LAST. Short daily and weekly hires are the
+   * exception — de-mob is often billed up front because everyone knows the
+   * machine is coming back within the month. So both are opt-in per invoice
+   * rather than inferred, and the caller decides the default.
+   */
+  includeMobilization?: boolean
+  includeDemobilization?: boolean
 }): BillingProposal {
   const lines: ProposedLine[] = []
   const warnings: Warning[] = []
@@ -289,9 +309,127 @@ export function buildProposal({
     }
   }
 
+  // --- Mobilization ------------------------------------------------------
+  //
+  // Always last on the invoice, matching how the printed form is filled in.
+
+  if (includeMobilization && mobilization) {
+    if (mobilization.mobilizationCharge === 'CHARGED') {
+      const amount = mobilization.mobilizationAmount ?? 0
+
+      lines.push({
+        kind: 'MOBILIZATION',
+        description: 'Mobilization',
+        uom: 'Lump sum',
+        quantity: 1,
+        unitRate: amount,
+        amount,
+      })
+
+      if (mobilization.mobilizationAmount === null) {
+        warnings.push({
+          code: 'MOBILIZATION_AMOUNT_MISSING',
+          severity: 'AMBER',
+          message:
+            'Mobilization is charged but no amount is recorded — it will bill as zero. The figure comes from the quotation.',
+        })
+      }
+    } else {
+      warnings.push({
+        code: 'MOBILIZATION_NOT_CHARGEABLE',
+        severity: 'AMBER',
+        message:
+          'Mobilization was asked for but this contract mobilizes free of charge, so no line was added.',
+      })
+    }
+  }
+
+  if (includeDemobilization && mobilization) {
+    if (mobilization.demobilizationCharge === 'CHARGED') {
+      const amount = mobilization.demobilizationAmount ?? 0
+
+      lines.push({
+        kind: 'DEMOBILIZATION',
+        description: 'De-mobilization',
+        uom: 'Lump sum',
+        quantity: 1,
+        unitRate: amount,
+        amount,
+      })
+
+      if (mobilization.demobilizationAmount === null) {
+        warnings.push({
+          code: 'DEMOBILIZATION_AMOUNT_MISSING',
+          severity: 'AMBER',
+          message:
+            'De-mobilization is charged but no amount is recorded — it will bill as zero.',
+        })
+      }
+    } else {
+      warnings.push({
+        code: 'DEMOBILIZATION_NOT_CHARGEABLE',
+        severity: 'AMBER',
+        message:
+          'De-mobilization was asked for but this contract de-mobilizes free of charge, so no line was added.',
+      })
+    }
+  }
+
   const total = lines.reduce((sum, line) => sum + line.amount, 0)
 
   return { lines, total, warnings }
+}
+
+/**
+ * Splits a span into calendar-month periods.
+ *
+ * Most invoicing here is monthly — a customer hiring from 1 Aug to 15 Oct
+ * usually wants an August, a September and an October invoice. Some want one
+ * invoice for the whole span instead, which is simply not calling this.
+ *
+ * Months are clipped to the span, so the first and last are part months rather
+ * than whole ones.
+ */
+export function splitIntoMonths(start: Date, end: Date): Period[] {
+  const periods: Period[] = []
+  let cursor = start
+
+  while (cursor.getTime() <= end.getTime()) {
+    const monthEnd = new Date(
+      Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0),
+    )
+    const periodEnd = monthEnd.getTime() < end.getTime() ? monthEnd : end
+
+    periods.push({ start: cursor, end: periodEnd })
+
+    cursor = new Date(
+      Date.UTC(periodEnd.getUTCFullYear(), periodEnd.getUTCMonth(), periodEnd.getUTCDate() + 1),
+    )
+  }
+
+  return periods
+}
+
+/**
+ * Invoicing dated after the LPO has expired.
+ *
+ * An open expiry can never be breached, so it is never checked. A closed one
+ * is: raising an invoice against a lapsed LPO is how work ends up unpayable.
+ */
+export function lpoExpiryWarning(
+  lpo: { number: string; validity: Date | null } | null,
+  invoiceDate: Date,
+): Warning | null {
+  if (!lpo?.validity) return null
+  if (invoiceDate.getTime() <= lpo.validity.getTime()) return null
+
+  return {
+    code: 'INVOICE_AFTER_LPO_EXPIRY',
+    severity: 'RED',
+    message: `This invoice is dated ${formatDate(invoiceDate)}, after LPO ${
+      lpo.number
+    } expired on ${formatDate(lpo.validity)}.`,
+  }
 }
 
 /**

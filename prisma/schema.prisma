@@ -43,6 +43,7 @@ model Customer {
   documents Document[]
   contracts Contract[]
   lpos      Lpo[]
+  invoices  Invoice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -313,7 +314,7 @@ model Contract {
 
   equipmentAssignments EquipmentAssignment[]
   operatorAssignments  OperatorAssignment[]
-  invoices             Invoice[]
+  invoices             InvoiceContract[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -355,6 +356,7 @@ model Lpo {
   notes String?
 
   contracts Contract[]
+  invoices  Invoice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -378,6 +380,16 @@ model EquipmentAssignment {
   startDate DateTime
   /// Null means currently assigned
   endDate   DateTime?
+
+  /// The delivery note raised when THIS machine went to site.
+  ///
+  /// On the assignment rather than the contract because a new machine means a
+  /// new delivery: a contract that swaps a machine has two deliveries, and the
+  /// replacement's note would have nowhere to live. The machine's registration
+  /// number is how the right note is found, and that is reachable through the
+  /// equipment relation.
+  deliveryNoteNumber String?
+  deliveryDate       DateTime?
 
   /// PER_DAY | PER_MONTH | PER_WORKING_HOUR.
   /// Per assignment, not per contract: concurrent machines can be on different
@@ -486,16 +498,27 @@ model OperatorAssignment {
 // Billing (phase 3 — modelled now so the schema is complete)
 // ---------------------------------------------------------------------------
 
+/// An invoice normally covers ONE contract, which means one machine: if a
+/// customer disputes a machine, payment on the others is not held up.
+///
+/// It CAN cover several, but only deliberately. Some customers ask for one
+/// invoice across every machine on the same LPO, and refusing would just move
+/// the work outside the system. Combining reintroduces the dispute risk, so it
+/// is never the default.
 model Invoice {
   id         String   @id @default(cuid())
-  contractId String
-  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  /// The LPO being drawn down. Null when the contracts are not on one yet.
+  /// Contracts on a single invoice must share this.
+  lpoId String?
+  lpo   Lpo?    @relation(fields: [lpoId], references: [id])
+
+  /// Which contracts this invoice bills. Usually exactly one.
+  contracts InvoiceContract[]
 
   invoiceNumber String @unique
-
-  /// "D.N. NO." on the printed form — the delivery note this invoice refers
-  /// to. Entered by hand; delivery notes live outside this system.
-  deliveryNoteNumber String?
 
   periodStart DateTime
   periodEnd   DateTime
@@ -517,8 +540,24 @@ model Invoice {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([contractId])
+  @@index([customerId])
+  @@index([lpoId])
   @@index([status])
+}
+
+/// Join between an invoice and the contracts it bills.
+///
+/// Explicit rather than derived from the line items, so "every invoice
+/// touching this contract" stays a single cheap query even for a contract
+/// whose lines were all zero in some period.
+model InvoiceContract {
+  invoiceId  String
+  invoice    Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@id([invoiceId, contractId])
+  @@index([contractId])
 }
 
 /// One line per assignment slice, so an invoice covering a machine swap shows
