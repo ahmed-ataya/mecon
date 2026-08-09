@@ -7,10 +7,11 @@ export const metadata: Metadata = {
   description: 'Equipment rental and contracting operations',
 }
 
-// Invoices arrive in phase 3. Links are added as each ships, so the nav never
-// points at a page that does not exist yet.
+// Links are added as each section ships, so the nav never points at a page
+// that does not exist yet.
 const NAV = [
   { href: '/contracts', label: 'Contracts' },
+  { href: '/invoices', label: 'Invoices' },
   { href: '/lpos', label: 'LPOs' },
   { href: '/customers', label: 'Customers' },
   { href: '/equipment', label: 'Equipment' },

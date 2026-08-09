@@ -90,8 +90,19 @@ CREATE TABLE "Contract" (
     "lpoId" TEXT,
     "quotationRef" TEXT,
     "mobilizationBy" TEXT,
+    "mobilizationParty" TEXT,
     "mobilizationCharge" TEXT,
     "mobilizationAmount" INTEGER,
+    "mobilizationPaid" BOOLEAN NOT NULL DEFAULT false,
+    "demobilizationDate" TIMESTAMP(3),
+    "demobilizationBy" TEXT,
+    "demobilizationParty" TEXT,
+    "demobilizationCharge" TEXT,
+    "demobilizationAmount" INTEGER,
+    "demobilizationPaid" BOOLEAN NOT NULL DEFAULT false,
+    "isCrossHire" BOOLEAN NOT NULL DEFAULT false,
+    "crossHireSupplier" TEXT,
+    "crossHireRate" INTEGER,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -103,6 +114,7 @@ CREATE TABLE "Lpo" (
     "id" TEXT NOT NULL,
     "customerId" TEXT NOT NULL,
     "number" TEXT NOT NULL,
+    "issuedDate" TIMESTAMP(3),
     "amount" INTEGER,
     "validity" TIMESTAMP(3),
     "notes" TEXT,
@@ -119,6 +131,8 @@ CREATE TABLE "EquipmentAssignment" (
     "equipmentId" TEXT NOT NULL,
     "startDate" TIMESTAMP(3) NOT NULL,
     "endDate" TIMESTAMP(3),
+    "deliveryNoteNumber" TEXT,
+    "deliveryDate" TIMESTAMP(3),
     "rateType" TEXT NOT NULL,
     "rateAmount" INTEGER NOT NULL,
     "reason" TEXT NOT NULL DEFAULT 'INITIAL',
@@ -130,6 +144,20 @@ CREATE TABLE "EquipmentAssignment" (
 );
 
 -- CreateTable
+CREATE TABLE "OffHirePeriod" (
+    "id" TEXT NOT NULL,
+    "equipmentAssignmentId" TEXT NOT NULL,
+    "startDate" TIMESTAMP(3) NOT NULL,
+    "endDate" TIMESTAMP(3),
+    "reason" TEXT NOT NULL,
+    "note" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "OffHirePeriod_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "OperatorAssignment" (
     "id" TEXT NOT NULL,
     "contractId" TEXT NOT NULL,
@@ -138,8 +166,11 @@ CREATE TABLE "OperatorAssignment" (
     "startDate" TIMESTAMP(3) NOT NULL,
     "endDate" TIMESTAMP(3),
     "reason" TEXT NOT NULL DEFAULT 'INITIAL',
-    "operatorCost" INTEGER,
-    "operatorRebill" INTEGER,
+    "operatorHourlyCost" INTEGER,
+    "operatorHourlyRebill" INTEGER,
+    "overtimeMultiplier" DOUBLE PRECISION NOT NULL DEFAULT 1.25,
+    "normalHoursPerDay" DOUBLE PRECISION NOT NULL DEFAULT 8,
+    "overtimeHoursPerDay" DOUBLE PRECISION NOT NULL DEFAULT 2,
     "note" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -150,7 +181,8 @@ CREATE TABLE "OperatorAssignment" (
 -- CreateTable
 CREATE TABLE "Invoice" (
     "id" TEXT NOT NULL,
-    "contractId" TEXT NOT NULL,
+    "customerId" TEXT NOT NULL,
+    "lpoId" TEXT,
     "invoiceNumber" TEXT NOT NULL,
     "periodStart" TIMESTAMP(3) NOT NULL,
     "periodEnd" TIMESTAMP(3) NOT NULL,
@@ -166,11 +198,20 @@ CREATE TABLE "Invoice" (
 );
 
 -- CreateTable
+CREATE TABLE "InvoiceContract" (
+    "invoiceId" TEXT NOT NULL,
+    "contractId" TEXT NOT NULL,
+
+    CONSTRAINT "InvoiceContract_pkey" PRIMARY KEY ("invoiceId","contractId")
+);
+
+-- CreateTable
 CREATE TABLE "InvoiceLineItem" (
     "id" TEXT NOT NULL,
     "invoiceId" TEXT NOT NULL,
     "kind" TEXT NOT NULL,
     "description" TEXT NOT NULL,
+    "uom" TEXT NOT NULL,
     "equipmentAssignmentId" TEXT,
     "operatorAssignmentId" TEXT,
     "quantity" DOUBLE PRECISION NOT NULL,
@@ -244,6 +285,9 @@ CREATE INDEX "EquipmentAssignment_contractId_idx" ON "EquipmentAssignment"("cont
 CREATE INDEX "EquipmentAssignment_equipmentId_idx" ON "EquipmentAssignment"("equipmentId");
 
 -- CreateIndex
+CREATE INDEX "OffHirePeriod_equipmentAssignmentId_idx" ON "OffHirePeriod"("equipmentAssignmentId");
+
+-- CreateIndex
 CREATE INDEX "OperatorAssignment_contractId_idx" ON "OperatorAssignment"("contractId");
 
 -- CreateIndex
@@ -253,10 +297,16 @@ CREATE INDEX "OperatorAssignment_operatorId_idx" ON "OperatorAssignment"("operat
 CREATE UNIQUE INDEX "Invoice_invoiceNumber_key" ON "Invoice"("invoiceNumber");
 
 -- CreateIndex
-CREATE INDEX "Invoice_contractId_idx" ON "Invoice"("contractId");
+CREATE INDEX "Invoice_customerId_idx" ON "Invoice"("customerId");
+
+-- CreateIndex
+CREATE INDEX "Invoice_lpoId_idx" ON "Invoice"("lpoId");
 
 -- CreateIndex
 CREATE INDEX "Invoice_status_idx" ON "Invoice"("status");
+
+-- CreateIndex
+CREATE INDEX "InvoiceContract_contractId_idx" ON "InvoiceContract"("contractId");
 
 -- CreateIndex
 CREATE INDEX "InvoiceLineItem_invoiceId_idx" ON "InvoiceLineItem"("invoiceId");
@@ -289,13 +339,25 @@ ALTER TABLE "EquipmentAssignment" ADD CONSTRAINT "EquipmentAssignment_contractId
 ALTER TABLE "EquipmentAssignment" ADD CONSTRAINT "EquipmentAssignment_equipmentId_fkey" FOREIGN KEY ("equipmentId") REFERENCES "Equipment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "OffHirePeriod" ADD CONSTRAINT "OffHirePeriod_equipmentAssignmentId_fkey" FOREIGN KEY ("equipmentAssignmentId") REFERENCES "EquipmentAssignment"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "OperatorAssignment" ADD CONSTRAINT "OperatorAssignment_contractId_fkey" FOREIGN KEY ("contractId") REFERENCES "Contract"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "OperatorAssignment" ADD CONSTRAINT "OperatorAssignment_operatorId_fkey" FOREIGN KEY ("operatorId") REFERENCES "Operator"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Invoice" ADD CONSTRAINT "Invoice_contractId_fkey" FOREIGN KEY ("contractId") REFERENCES "Contract"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Invoice" ADD CONSTRAINT "Invoice_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Invoice" ADD CONSTRAINT "Invoice_lpoId_fkey" FOREIGN KEY ("lpoId") REFERENCES "Lpo"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "InvoiceContract" ADD CONSTRAINT "InvoiceContract_invoiceId_fkey" FOREIGN KEY ("invoiceId") REFERENCES "Invoice"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "InvoiceContract" ADD CONSTRAINT "InvoiceContract_contractId_fkey" FOREIGN KEY ("contractId") REFERENCES "Contract"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "InvoiceLineItem" ADD CONSTRAINT "InvoiceLineItem_invoiceId_fkey" FOREIGN KEY ("invoiceId") REFERENCES "Invoice"("id") ON DELETE CASCADE ON UPDATE CASCADE;

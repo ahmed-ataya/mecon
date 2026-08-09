@@ -166,7 +166,8 @@ type MobilizationLike = {
 }
 
 export function buildProposal({
-  period,
+  period: requestedPeriod,
+  contract,
   equipmentAssignments,
   operatorAssignments,
   mobilization,
@@ -174,6 +175,14 @@ export function buildProposal({
   includeDemobilization = false,
 }: {
   period: Period
+  /**
+   * The contract's own span. The period is clamped to it, because an
+   * assignment left open does NOT mean the hire continued: a contract closing
+   * on the 5th stops billing on the 5th even if nobody set an end date on the
+   * machine. Without this a closed contract keeps billing every month and
+   * overcharges the customer.
+   */
+  contract?: { mobilizationDate: Date; closingDate: Date | null }
   equipmentAssignments: EquipmentAssignmentLike[]
   operatorAssignments: OperatorAssignmentLike[]
   mobilization?: MobilizationLike
@@ -189,6 +198,25 @@ export function buildProposal({
 }): BillingProposal {
   const lines: ProposedLine[] = []
   const warnings: Warning[] = []
+
+  // Clamp to the contract. Nothing before mobilization, nothing after closing.
+  const start =
+    contract && contract.mobilizationDate.getTime() > requestedPeriod.start.getTime()
+      ? contract.mobilizationDate
+      : requestedPeriod.start
+
+  const end =
+    contract?.closingDate &&
+    contract.closingDate.getTime() < requestedPeriod.end.getTime()
+      ? contract.closingDate
+      : requestedPeriod.end
+
+  // The whole requested period falls outside the contract's life.
+  if (start.getTime() > end.getTime()) {
+    return { lines: [], total: 0, warnings: [] }
+  }
+
+  const period: Period = { start, end }
 
   // --- Equipment ----------------------------------------------------------
 
