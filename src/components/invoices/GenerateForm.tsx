@@ -4,13 +4,13 @@ import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import { formatDate } from '@/lib/dates'
 import { Combobox } from '@/components/ui/Combobox'
+import { BillingCalendar } from './BillingCalendar'
 import { HireBar, HireScale } from './HireBar'
 import {
   Field,
   FormError,
   buttonPrimaryClass,
   buttonSecondaryClass,
-  inputClass,
 } from '@/components/ui/form'
 import type { ActionState } from '@/lib/actions/invoices'
 import type { PartyOption } from '@/lib/contract-options'
@@ -222,7 +222,7 @@ export function GenerateForm({
       <FormError message={errors.form} />
 
       <section className="space-y-5 rounded-lg border border-slate-200 bg-white p-6">
-        <h2 className="font-semibold">Customer and period</h2>
+        <h2 className="font-semibold">Customer</h2>
 
         <Field label="Customer" htmlFor="customerId">
           <Combobox
@@ -248,7 +248,7 @@ export function GenerateForm({
                 {formatDate(billableTo)}
               </span>{' '}
               for what is selected. The calendar greys out everything else —
-              earlier days are already invoiced or before the machine arrived,
+earlier days are already invoiced or before the machine arrived,
               later days have not happened yet.
             </>
           ) : chosen.length > 0 ? (
@@ -263,64 +263,6 @@ export function GenerateForm({
             </>
           )}
         </p>
-
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Period start" htmlFor="periodStart">
-            <input
-              id="periodStart"
-              name="periodStart"
-              type="date"
-              value={periodStart}
-              min={billableFrom ? toInput(billableFrom) : undefined}
-              max={billableTo ? toInput(billableTo) : undefined}
-              onChange={(event) => {
-                setPeriodStart(event.target.value)
-                setTouchedDates(true)
-              }}
-              className={inputClass}
-            />
-            {errors.periodStart && (
-              <p className="mt-1 text-xs text-red-600">{errors.periodStart}</p>
-            )}
-          </Field>
-
-          <Field label="Period end" htmlFor="periodEnd">
-            <input
-              id="periodEnd"
-              name="periodEnd"
-              type="date"
-              value={periodEnd}
-              min={periodStart || (billableFrom ? toInput(billableFrom) : undefined)}
-              max={billableTo ? toInput(billableTo) : undefined}
-              onChange={(event) => {
-                setPeriodEnd(event.target.value)
-                setTouchedDates(true)
-              }}
-              className={inputClass}
-            />
-            {errors.periodEnd && (
-              <p className="mt-1 text-xs text-red-600">{errors.periodEnd}</p>
-            )}
-          </Field>
-        </div>
-
-        <label className="flex items-start gap-3 rounded-md bg-slate-50 px-4 py-3 ring-1 ring-inset ring-slate-200">
-          <input
-            type="checkbox"
-            name="splitMonthly"
-            className="mt-0.5 h-4 w-4 rounded border-slate-300"
-          />
-          <span className="text-sm">
-            <span className="font-medium text-slate-800">
-              One invoice per calendar month
-            </span>
-            <span className="mt-0.5 block text-xs text-slate-500">
-              A hire from 1 Aug to 15 Oct becomes an August, a September and a
-              part-October invoice. Leave unticked for a single invoice covering
-              the whole span.
-            </span>
-          </span>
-        </label>
       </section>
 
       <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-6">
@@ -482,6 +424,89 @@ export function GenerateForm({
           <p className="text-xs text-red-600">{errors.combine}</p>
         )}
       </section>
+
+      <section className="space-y-5 rounded-lg border border-slate-200 bg-white p-6">
+        <div>
+          <h2 className="font-semibold">Period to invoice</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Click the first day, then the last. Only days that can actually be
+            invoiced are selectable.
+          </p>
+        </div>
+
+        {/* Hidden inputs carry the values; the calendar is the control. */}
+        <input type="hidden" name="periodStart" value={periodStart} readOnly />
+        <input type="hidden" name="periodEnd" value={periodEnd} readOnly />
+
+        {chosen.length === 0 ? (
+          <p className="rounded-md border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+            Pick the machines below and the calendar appears here, with the days
+            you can invoice marked.
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-baseline gap-x-3 text-sm">
+              <span className="font-medium text-slate-800">
+                {periodStart && periodEnd
+                  ? `${formatDate(new Date(`${periodStart}T00:00:00.000Z`))} – ${formatDate(new Date(`${periodEnd}T00:00:00.000Z`))}`
+                  : periodStart
+                    ? `${formatDate(new Date(`${periodStart}T00:00:00.000Z`))} – pick the end date`
+                    : 'Pick the first day'}
+              </span>
+              {(periodStart || periodEnd) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPeriodStart('')
+                    setPeriodEnd('')
+                    setTouchedDates(true)
+                  }}
+                  className="text-xs text-slate-500 underline hover:text-slate-800"
+                >
+                  clear
+                </button>
+              )}
+            </div>
+
+            <BillingCalendar
+              contracts={chosen}
+              start={periodStart}
+              end={periodEnd}
+              onChange={(nextStart, nextEnd) => {
+                setPeriodStart(nextStart)
+                setPeriodEnd(nextEnd)
+                setTouchedDates(true)
+              }}
+            />
+
+            {errors.periodStart && (
+              <p className="text-xs text-red-600">{errors.periodStart}</p>
+            )}
+            {errors.periodEnd && (
+              <p className="text-xs text-red-600">{errors.periodEnd}</p>
+            )}
+          </>
+        )}
+
+        <label className="flex items-start gap-3 rounded-md bg-slate-50 px-4 py-3 ring-1 ring-inset ring-slate-200">
+          <input
+            type="checkbox"
+            name="splitMonthly"
+            className="mt-0.5 h-4 w-4 rounded border-slate-300"
+          />
+          <span className="text-sm">
+            <span className="font-medium text-slate-800">
+              One invoice per calendar month
+            </span>
+            <span className="mt-0.5 block text-xs text-slate-500">
+              A hire from 1 Aug to 15 Oct becomes an August, a September and a
+              part-October invoice. Leave unticked for a single invoice covering
+              the whole span.
+            </span>
+          </span>
+        </label>
+      </section>
+
 
       <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-6">
         <div>
