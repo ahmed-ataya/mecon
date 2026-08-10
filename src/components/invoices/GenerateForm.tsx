@@ -141,6 +141,39 @@ export function GenerateForm({
   const lpoIds = [...new Set(chosen.map((contract) => contract.lpoId))]
   const mixedLpos = combine && lpoIds.length > 1
 
+  // The window that can actually be invoiced for what is selected. Fed to the
+  // date inputs as min/max, which is what greys out the impossible days in the
+  // browser's own calendar — the same way a flight search greys out dates you
+  // cannot fly.
+  //
+  // Earliest: the first day not yet billed. Anything before it is either
+  // before the machine arrived or already on an invoice.
+  const billableFrom = (() => {
+    const starts = chosen
+      .map(nextUninvoicedFrom)
+      .filter((date): date is Date => date !== null)
+
+    if (starts.length === 0) return null
+    return starts.reduce((min, date) => (date < min ? date : min))
+  })()
+
+  // Latest: when the hire ended. An ongoing hire runs to the end of this
+  // month, since invoicing further ahead would bill days that have not
+  // happened.
+  const billableTo = (() => {
+    if (chosen.length === 0) return null
+
+    const now = new Date()
+    const endOfThisMonth = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0),
+    )
+
+    const ends = chosen.map((contract) => contract.workedTo ?? endOfThisMonth)
+    if (ends.length === 0) return null
+
+    return ends.reduce((max, date) => (date > max ? date : max))
+  })()
+
   function toggle(id: string) {
     const next = selected.includes(id)
       ? selected.filter((value) => value !== id)
@@ -208,8 +241,27 @@ export function GenerateForm({
         </Field>
 
         <p className="rounded-md bg-slate-50 px-4 py-3 text-xs text-slate-600 ring-1 ring-inset ring-slate-200">
-          Pick the contracts below first — the dates fill in from where the last
-          invoice stopped. Change them here if you need something different.
+          {billableFrom && billableTo ? (
+            <>
+              <span className="font-medium text-slate-800">
+                You can invoice {formatDate(billableFrom)} to{' '}
+                {formatDate(billableTo)}
+              </span>{' '}
+              for what is selected. The calendar greys out everything else —
+              earlier days are already invoiced or before the machine arrived,
+              later days have not happened yet.
+            </>
+          ) : chosen.length > 0 ? (
+            <span className="font-medium text-slate-800">
+              Everything on the selected contracts is already invoiced.
+            </span>
+          ) : (
+            <>
+              Pick the contracts below first — the dates fill in from where the
+              last invoice stopped, and the calendar limits itself to days you
+              can actually invoice.
+            </>
+          )}
         </p>
 
         <div className="grid gap-5 sm:grid-cols-2">
@@ -219,6 +271,8 @@ export function GenerateForm({
               name="periodStart"
               type="date"
               value={periodStart}
+              min={billableFrom ? toInput(billableFrom) : undefined}
+              max={billableTo ? toInput(billableTo) : undefined}
               onChange={(event) => {
                 setPeriodStart(event.target.value)
                 setTouchedDates(true)
@@ -236,6 +290,8 @@ export function GenerateForm({
               name="periodEnd"
               type="date"
               value={periodEnd}
+              min={periodStart || (billableFrom ? toInput(billableFrom) : undefined)}
+              max={billableTo ? toInput(billableTo) : undefined}
               onChange={(event) => {
                 setPeriodEnd(event.target.value)
                 setTouchedDates(true)
