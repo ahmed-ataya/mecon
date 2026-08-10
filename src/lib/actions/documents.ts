@@ -94,17 +94,24 @@ export async function updateDocument(
 
   const { ownerType, ownerId, approvedFor, ...fields } = parsed.data
 
-  // Approval bodies are a join table, so replace the set rather than diffing it.
-  await db.$transaction([
-    db.documentApproval.deleteMany({ where: { documentId: id } }),
-    db.document.update({
-      where: { id },
-      data: {
-        ...fields,
-        approvedFor: { create: approvedFor.map((body) => ({ body })) },
+  // Approval bodies are a join table, so the set is replaced rather than
+  // diffed. This is a NESTED write, not an explicit $transaction: Prisma runs
+  // the delete and the inserts in one atomic statement batch, so there is no
+  // separate transaction to acquire.
+  //
+  // That matters on Neon. Its pooled connection plus a cold start regularly
+  // pushed $transaction past its start timeout, and saving a document failed
+  // with "Unable to start a transaction in the given time".
+  await db.document.update({
+    where: { id },
+    data: {
+      ...fields,
+      approvedFor: {
+        deleteMany: {},
+        create: approvedFor.map((body) => ({ body })),
       },
-    }),
-  ])
+    },
+  })
 
   revalidatePath(`/${OWNER_PATH[ownerType]}/${ownerId}`)
   revalidatePath(`/${OWNER_PATH[ownerType]}`)

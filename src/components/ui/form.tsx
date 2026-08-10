@@ -49,3 +49,41 @@ export function FormError({ message }: { message?: string }) {
     </div>
   )
 }
+
+/**
+ * Every error, listed at the top of the form.
+ *
+ * Inline messages only work for fields that are ON SCREEN. A field hidden
+ * behind a conditional — operator cost when the arrangement is not a market
+ * operator — has nowhere to show its error, so the submit fails and nothing
+ * explains why. That happened, and it looked like the form was simply broken.
+ *
+ * `shown` lists the keys already rendered inline; anything else appears here so
+ * no error can be invisible.
+ */
+export function ErrorSummary({
+  errors,
+  shown = [],
+}: {
+  errors: Record<string, string>
+  shown?: string[]
+}) {
+  const hidden = Object.entries(errors).filter(
+    ([field]) => field !== 'form' && !shown.includes(field),
+  )
+
+  if (hidden.length === 0) return null
+
+  return (
+    <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-inset ring-red-200">
+      <p className="font-medium">This could not be saved</p>
+      <ul className="mt-1 space-y-0.5">
+        {hidden.map(([field, message]) => (
+          <li key={field}>
+            <span className="font-medium">{field}</span>: {message}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}

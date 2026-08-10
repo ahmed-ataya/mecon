@@ -7,7 +7,6 @@ import {
   CAPACITY_UNITS,
   DOCUMENT_TYPES_BY_OWNER,
   EQUIPMENT_ASSIGNMENT_REASONS,
-  EQUIPMENT_TYPES,
   OPERATOR_ASSIGNMENT_REASONS,
   OPERATOR_SOURCES,
   OWNER_TYPES,
@@ -27,19 +26,30 @@ import { parseQar } from './money'
  * parse through here before any write.
  */
 
-/** Empty form fields arrive as '' — treat them as absent, not as empty strings. */
+/**
+ * Empty form fields arrive as '' — treated as absent, not as empty strings.
+ *
+ * `.optional()` matters as much as the empty check: a field the form did not
+ * RENDER is missing from FormData entirely, so it arrives undefined rather
+ * than ''. Without this, hiding a field behind a conditional silently broke
+ * the whole submit — the operator cost inputs only exist for a market
+ * operator, and their absence failed validation with an error that had nowhere
+ * on screen to appear.
+ */
 const optionalText = z
   .string()
   .trim()
-  .transform((value) => (value === '' ? null : value))
-  .nullable()
+  .optional()
+  .transform((value) => (value === undefined || value === '' ? null : value))
 
 /** A YYYY-MM-DD form value becomes a UTC-midnight Date, or null. */
 const optionalDate = z
   .string()
   .trim()
-  .transform((value) => (value === '' ? null : parseDateInput(value)))
-  .nullable()
+  .optional()
+  .transform((value) =>
+    value === undefined || value === '' ? null : parseDateInput(value),
+  )
   .refine((value) => value !== undefined, { message: 'Invalid date' })
 
 // --- Customer -------------------------------------------------------------
@@ -65,7 +75,8 @@ export type CustomerInput = z.infer<typeof customerSchema>
 
 export const equipmentSchema = z.object({
   name: z.string().trim().min(1, 'Unit label is required'),
-  type: z.enum(EQUIPMENT_TYPES, { message: 'Select an equipment type' }),
+  // Free text — the fleet is not a closed set. See enums.ts.
+  type: z.string().trim().min(1, 'Equipment type is required'),
   brand: optionalText,
   model: optionalText,
   /** Year only — a full date would imply precision nobody records. */
@@ -199,8 +210,9 @@ const moneyField = (label: string) =>
   z
     .string()
     .trim()
+    .optional()
     .transform((value, ctx) => {
-      const halalas = parseQar(value)
+      const halalas = parseQar(value ?? '')
 
       if (halalas === undefined) {
         ctx.addIssue({ code: 'custom', message: `${label} must be a number` })

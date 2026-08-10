@@ -183,7 +183,7 @@ export function Combobox({
           {filtered.length === 0 ? (
             <li className="px-3 py-2 text-sm text-slate-500">
               {allowCustom && query.trim()
-                ? `Use “${query.trim()}” — new entry, saved with this contract`
+                ? `Use “${query.trim()}” — saved as a new entry`
                 : emptyLabel}
             </li>
           ) : (

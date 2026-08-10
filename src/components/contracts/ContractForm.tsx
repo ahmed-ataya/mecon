@@ -20,6 +20,7 @@ import type {
 import type { Warning } from '@/lib/warnings'
 import { Combobox } from '@/components/ui/Combobox'
 import {
+  ErrorSummary,
   Field,
   FormError,
   buttonPrimaryClass,
@@ -115,6 +116,23 @@ export function ContractForm({
   return (
     <form action={formAction} className="space-y-6">
       <FormError message={errors.form} />
+      <ErrorSummary
+        errors={errors}
+        shown={[
+          'customerId',
+          'projectName',
+          'siteName',
+          'siteRegime',
+          'mobilizationDate',
+          'closingDate',
+          'equipmentId',
+          'rateAmount',
+          'operatorId',
+          'lpoId',
+          'mobilizationCharge',
+          'mobilizationAmount',
+        ]}
+      />
 
       <section className="space-y-5 rounded-lg border border-slate-200 bg-white p-6">
         <h2 className="font-semibold">Project</h2>

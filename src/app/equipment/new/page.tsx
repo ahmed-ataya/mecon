@@ -1,8 +1,14 @@
 import Link from 'next/link'
 import { EquipmentForm } from '@/components/equipment/EquipmentForm'
 import { createEquipment } from '@/lib/actions/equipment'
+import { loadEquipmentTypeOptions } from '@/lib/equipment-options'
 
-export default function NewEquipmentPage() {
+/** Dynamic so new type suggestions appear without a rebuild. */
+export const dynamic = 'force-dynamic'
+
+export default async function NewEquipmentPage() {
+  const typeSuggestions = await loadEquipmentTypeOptions()
+
   return (
     <div className="max-w-2xl space-y-6">
       <div>
@@ -24,6 +30,7 @@ export default function NewEquipmentPage() {
       <div className="rounded-lg border border-slate-200 bg-white p-6">
         <EquipmentForm
           action={createEquipment}
+          typeSuggestions={typeSuggestions}
           submitLabel="Create equipment"
           cancelHref="/equipment"
         />

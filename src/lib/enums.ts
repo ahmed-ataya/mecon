@@ -12,19 +12,34 @@
 
 // --- Equipment ------------------------------------------------------------
 
-export const EQUIPMENT_TYPES = [
+/**
+ * Starting SUGGESTIONS for equipment type, not a closed list.
+ *
+ * The fleet is not fixed: the master sheet already carries Boom Truck,
+ * Telehandler, Motor Grader and Skid Loader, and the next machine bought could
+ * be anything. A closed list would force real machines into "Other" and lose
+ * what they actually are — the same data loss that made site names free text.
+ *
+ * The form autocompletes from these plus every type already in use, and
+ * accepts anything typed.
+ */
+export const EQUIPMENT_TYPE_SUGGESTIONS = [
   'Excavator',
+  'Wheel Excavator',
+  'Mini Excavator',
   'Wheel Loader',
   'Backhoe Loader (JCB)',
+  'Skid Loader',
   'Skid Steer (Bobcat)',
+  'Boom Truck',
+  'Telehandler',
+  'Motor Grader',
   'Bulldozer',
   'Crane',
   'Dump Truck',
   'Roller/Compactor',
   'Forklift',
-  'Other',
 ] as const
-export type EquipmentType = (typeof EQUIPMENT_TYPES)[number]
 
 /**
  * Capacity units. Tonnage covers most of the fleet; metres exists because a

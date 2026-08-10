@@ -3,11 +3,8 @@
 import Link from 'next/link'
 import { useActionState, useEffect, useRef } from 'react'
 import type { Equipment } from '@prisma/client'
-import {
-  CAPACITY_UNITS,
-  CAPACITY_UNIT_LABELS,
-  EQUIPMENT_TYPES,
-} from '@/lib/enums'
+import { CAPACITY_UNITS, CAPACITY_UNIT_LABELS } from '@/lib/enums'
+import { Combobox } from '@/components/ui/Combobox'
 import {
   Field,
   FormError,
@@ -21,17 +18,19 @@ import type { ActionState } from '@/lib/actions/equipment'
 export function EquipmentForm({
   action,
   equipment,
+  typeSuggestions,
   submitLabel,
   cancelHref,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
   equipment?: Equipment
+  /** Known types — suggestions only, anything can be typed. */
+  typeSuggestions: { value: string; label: string }[]
   submitLabel: string
   cancelHref: string
 }) {
   const [state, formAction, pending] = useActionState(action, {})
   const errors = state.errors ?? {}
-  const typeRef = useRef<HTMLSelectElement>(null)
   const unitRef = useRef<HTMLSelectElement>(null)
 
   // After a failed submit, fall back to what was typed rather than to the
@@ -39,7 +38,7 @@ export function EquipmentForm({
   const values = state.values
   const initial = {
     name: values?.name ?? equipment?.name ?? '',
-    type: values?.type ?? equipment?.type ?? EQUIPMENT_TYPES[0],
+    type: values?.type ?? equipment?.type ?? '',
     brand: values?.brand ?? equipment?.brand ?? '',
     model: values?.model ?? equipment?.model ?? '',
     yearOfManufacture:
@@ -58,7 +57,6 @@ export function EquipmentForm({
 
   // Selects lose their value to React's post-action form reset — see NOTES.md.
   useEffect(() => {
-    if (typeRef.current) typeRef.current.value = initial.type
     if (unitRef.current) unitRef.current.value = initial.capacityUnit
   })
 
@@ -84,20 +82,18 @@ export function EquipmentForm({
           )}
         </Field>
 
-        <Field label="Type" htmlFor="type">
-          <select
-            id="type"
+        <Field
+          label="Type"
+          htmlFor="type"
+          hint="Type anything — suggestions come from machines already recorded."
+        >
+          <Combobox
             name="type"
-            ref={typeRef}
+            options={typeSuggestions}
             defaultValue={initial.type}
-            className={inputClass}
-          >
-            {EQUIPMENT_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
+            placeholder="e.g. Boom Truck, Telehandler"
+            allowCustom
+          />
           {errors.type && (
             <p className="mt-1 text-xs text-red-600">{errors.type}</p>
           )}
