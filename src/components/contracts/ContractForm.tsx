@@ -28,6 +28,7 @@ import {
   inputClass,
 } from '@/components/ui/form'
 import type { ActionState } from '@/lib/actions/contracts'
+import { timeAgo, useFormDraft } from '@/lib/use-form-draft'
 import { MobilizationFields } from './MobilizationFields'
 import { WarningList } from './WarningList'
 
@@ -65,7 +66,15 @@ export function ContractForm({
 }) {
   const [state, formAction, pending] = useActionState(action, {})
   const errors = state.errors ?? {}
-  const values = state.values ?? {}
+
+  // An unfinished form is kept in the browser, not the database — see
+  // use-form-draft.ts. A restored draft is fed in through the SAME `values`
+  // path an error echo uses, so every field picks it up without special cases.
+  const draft = useFormDraft('mecon:contract-draft')
+  const [restored, setRestored] = useState<Record<string, string> | null>(null)
+  const [formGeneration, setFormGeneration] = useState(0)
+
+  const values = state.values ?? restored ?? {}
 
   const [customerId, setCustomerId] = useState(values.customerId ?? '')
   const [siteRegime, setSiteRegime] = useState(values.siteRegime ?? SITES[0])
@@ -92,6 +101,26 @@ export function ContractForm({
     if (arrangementRef.current) arrangementRef.current.value = arrangement
   })
 
+  /**
+   * Remounting the <form> re-creates the uncontrolled inputs from `values`,
+   * but this component's OWN state does not re-run its initialisers — the key
+   * is on the form element, not on the component. So the controlled fields are
+   * set explicitly here. Missing this restored the project name but silently
+   * left the customer and dates blank.
+   */
+  function restoreDraft(saved: Record<string, string>) {
+    setRestored(saved)
+    setCustomerId(saved.customerId ?? '')
+    setSiteRegime(saved.siteRegime ?? SITES[0])
+    setEquipmentId(saved.equipmentId ?? '')
+    setOperatorId(saved.operatorId ?? '')
+    setArrangement((saved.arrangement as Arrangement) ?? 'WITH_OPERATOR')
+    setMobilizationDate(saved.mobilizationDate ?? '')
+    setClosingDate(saved.closingDate ?? '')
+    setMobilizationCharge(saved.mobilizationCharge ?? '')
+    setFormGeneration((current) => current + 1)
+  }
+
   const selectedCustomer = customers.find((c) => c.value === customerId)
   const selectedMachine = equipment.find((e) => e.value === equipmentId)
   const selectedOperator = operators.find((o) => o.value === operatorId)
@@ -114,8 +143,39 @@ export function ContractForm({
   if (siteWarning) liveWarnings.push(siteWarning)
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form
+      key={formGeneration}
+      action={formAction}
+      // Remounting re-runs every field's initial state from `values`, which is
+      // how a restored draft reaches the comboboxes and selects.
+      onInput={(event) => draft.save(event.currentTarget)}
+      onSubmit={(event) => draft.save(event.currentTarget)}
+      className="space-y-6"
+    >
       <FormError message={errors.form} />
+
+      {draft.found && !restored && (
+        <div className="flex flex-wrap items-center gap-3 rounded-md bg-sky-50 px-4 py-3 text-sm ring-1 ring-inset ring-sky-200">
+          <span className="text-sky-900">
+            You have an unfinished contract from{' '}
+            <span className="font-medium">{timeAgo(draft.found.savedAt)}</span>.
+          </span>
+          <button
+            type="button"
+            onClick={() => restoreDraft(draft.found!.values)}
+            className="rounded-md bg-sky-700 px-3 py-1 text-xs font-medium text-white hover:bg-sky-800"
+          >
+            Restore it
+          </button>
+          <button
+            type="button"
+            onClick={draft.clear}
+            className="text-xs text-sky-800 underline hover:text-sky-950"
+          >
+            Discard
+          </button>
+        </div>
+      )}
       <ErrorSummary
         errors={errors}
         shown={[
