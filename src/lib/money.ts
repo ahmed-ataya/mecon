@@ -77,3 +77,19 @@ export function parseQar(
   // decimal value exactly, so 1.15 * 100 must not be trusted unrounded.
   return Math.round(riyals * HALALAS_PER_RIYAL)
 }
+
+/**
+ * The hourly rate implied by an agreed daily, weekly or monthly rate.
+ *
+ * Rounded to whole halalas HERE, before it is multiplied by hours — which is
+ * how the printed invoices do it. A monthly rate of 16,000 gives
+ * 16000 / 260 = 61.538…, printed and charged as 61.54, and 255 hours at 61.54
+ * is 15,692.70. Multiplying by the unrounded figure would give 15,692.31 and
+ * fail to match the invoice.
+ */
+export function hourlyRate(
+  rateAmountHalalas: number,
+  hoursPerRateUnit: number,
+): number {
+  return Math.round(rateAmountHalalas / hoursPerRateUnit)
+}

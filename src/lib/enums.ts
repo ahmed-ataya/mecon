@@ -201,10 +201,28 @@ export const RATE_TYPE_LABELS: Record<RateType, string> = {
   PER_DAY: 'Per day',
 }
 
+/**
+ * Hours each rate covers. This is the heart of the billing maths.
+ *
+ * Everything is ultimately billed in HOURS: the agreed daily, weekly or
+ * monthly rate is converted to an hourly rate, and the invoice is hours times
+ * that rate. Pro rata needs no special case — a part period is simply fewer
+ * hours at the same rate.
+ *
+ * The figures come from the working week here: a day is 10 hours, and a week
+ * is Saturday to Thursday, so 6 x 10 = 60. A month is 26 working days,
+ * 26 x 10 = 260.
+ */
+export const RATE_TYPE_HOURS: Record<RateType, number> = {
+  PER_MONTH: 260,
+  PER_WEEK: 60,
+  PER_DAY: 10,
+}
+
 /** Nominal days each rate covers — used to spot a rate longer than the hire. */
 export const RATE_TYPE_DAYS: Record<RateType, number> = {
-  PER_MONTH: 30,
-  PER_WEEK: 7,
+  PER_MONTH: 26,
+  PER_WEEK: 6,
   PER_DAY: 1,
 }
 
