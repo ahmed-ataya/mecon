@@ -322,13 +322,11 @@ export const INVOICE_LINE_KINDS = [
 ] as const
 export type InvoiceLineKind = (typeof INVOICE_LINE_KINDS)[number]
 
-/** The UOM column on the printed invoice. */
-export const UOMS = ['Day', 'Week', 'Month', 'Hour', 'Lump sum'] as const
+/**
+ * The UOM column on the printed invoice.
+ *
+ * Only two, because hire is always billed in hours whatever the agreed rate,
+ * and everything else is a lump sum.
+ */
+export const UOMS = ['Hours', 'LS'] as const
 export type Uom = (typeof UOMS)[number]
-
-/** Which UOM an equipment rate prints as. */
-export const RATE_TYPE_UOM: Record<RateType, Uom> = {
-  PER_MONTH: 'Month',
-  PER_WEEK: 'Week',
-  PER_DAY: 'Day',
-}

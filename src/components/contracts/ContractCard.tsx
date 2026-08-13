@@ -43,7 +43,7 @@ type EquipmentAssignment = Assignment & {
 
 type OperatorAssignment = Assignment & {
   arrangement: string
-  operatorHourlyRebill: number | null
+  operatorHourlyCost: number | null
   operator: { id: string; name: string } | null
 }
 
@@ -182,9 +182,9 @@ export function ContractCard({ contract }: { contract: ContractCardData }) {
                     {ARRANGEMENT_LABELS[assignment.arrangement as Arrangement] ??
                       assignment.arrangement}
                   </span>
-                  {assignment.operatorHourlyRebill !== null && (
+                  {assignment.operatorHourlyCost !== null && (
                     <span className="text-xs text-slate-400">
-                      {formatQar(assignment.operatorHourlyRebill)}/hr
+                      cost {formatQar(assignment.operatorHourlyCost)}/hr
                     </span>
                   )}
                 </div>

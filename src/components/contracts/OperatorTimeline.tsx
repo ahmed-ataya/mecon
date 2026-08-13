@@ -33,7 +33,6 @@ export type OperatorAssignmentRow = {
   note: string | null
   arrangement: string
   operatorHourlyCost: number | null
-  operatorHourlyRebill: number | null
   operator: { id: string; name: string } | null
 }
 
@@ -68,11 +67,8 @@ export function OperatorTimeline({
           const planned = isAssignmentUpcoming(assignment)
           // Replaceable while it is running or still to come — not once ended.
           const current = !ended
-          const margin =
-            assignment.operatorHourlyRebill !== null &&
-            assignment.operatorHourlyCost !== null
-              ? assignment.operatorHourlyRebill - assignment.operatorHourlyCost
-              : null
+          // Margin is the contract's combined rate minus this cost, so it is
+          // shown on the contract rather than here.
 
           return (
             <li
@@ -120,21 +116,9 @@ export function OperatorTimeline({
                       : 'ongoing'}
                   </p>
 
-                  {(assignment.operatorHourlyCost !== null ||
-                    assignment.operatorHourlyRebill !== null) && (
+                  {assignment.operatorHourlyCost !== null && (
                     <p className="mt-1 text-xs text-slate-500">
-                      Cost {formatQar(assignment.operatorHourlyCost)}/hr · Rebill{' '}
-                      {formatQar(assignment.operatorHourlyRebill)}/hr
-                      {margin !== null && (
-                        <span
-                          className={
-                            margin < 0 ? 'text-red-600' : 'text-green-700'
-                          }
-                        >
-                          {' · margin '}
-                          {formatQar(margin)}/hr
-                        </span>
-                      )}
+                      We pay {formatQar(assignment.operatorHourlyCost)}/hr
                     </p>
                   )}
 
@@ -176,7 +160,6 @@ export function OperatorTimeline({
                     defaultArrangement={assignment.arrangement as Arrangement}
                     defaultReason="SICK_INJURED"
                     defaultHourlyCost={assignment.operatorHourlyCost}
-                    defaultHourlyRebill={assignment.operatorHourlyRebill}
                     minDate={assignment.startDate}
                     submitLabel="Replace operator"
                     onDone={() => setReplacing(null)}
@@ -198,7 +181,6 @@ function OperatorAssignmentForm({
   defaultArrangement,
   defaultReason,
   defaultHourlyCost,
-  defaultHourlyRebill,
   minDate,
   submitLabel,
   onDone,
@@ -211,7 +193,6 @@ function OperatorAssignmentForm({
   defaultArrangement: Arrangement
   defaultReason: string
   defaultHourlyCost: number | null
-  defaultHourlyRebill: number | null
   minDate?: Date
   submitLabel: string
   onDone: () => void
@@ -329,15 +310,6 @@ function OperatorAssignmentForm({
             />
           </Field>
 
-          <Field label="Operator rebill (QAR/hour)" htmlFor="operatorHourlyRebill">
-            <input
-              id="operatorHourlyRebill"
-              name="operatorHourlyRebill"
-              inputMode="decimal"
-              defaultValue={toRiyalInput(defaultHourlyRebill)}
-              className={inputClass}
-            />
-          </Field>
         </div>
       )}
 

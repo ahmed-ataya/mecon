@@ -1,8 +1,11 @@
+import { Fragment } from 'react'
 import { notFound } from 'next/navigation'
 import { db } from '@/lib/db'
 import { formatDate } from '@/lib/dates'
 import { formatAmountExact } from '@/lib/money'
 import { COMPANY, INVOICE_FOOTER_TERM } from '@/lib/company'
+import { amountInWords } from '@/lib/amount-in-words'
+import { shortDate } from '@/lib/billing'
 import { PrintControls } from '@/components/invoices/PrintControls'
 
 /**
@@ -28,8 +31,11 @@ export default async function InvoicePrintPage({
       customer: true,
       lpo: true,
       lineItems: {
-        include: { equipmentAssignment: true },
+        include: {
+          equipmentAssignment: { include: { equipment: true } },
+        },
       },
+      contracts: { include: { contract: true } },
     },
   })
 
@@ -45,7 +51,13 @@ export default async function InvoicePrintPage({
 
   // The pad has a fixed number of ruled rows; blanks keep the table the same
   // height whether there are two lines or ten.
-  const blankRows = Math.max(0, 12 - invoice.lineItems.length)
+  // Each line occupies two ruled rows, so the padding accounts for both.
+  const blankRows = Math.max(0, 14 - invoice.lineItems.length * 2)
+
+  // Sites appear in brackets after the customer name on the printed invoices.
+  const sites = [
+    ...new Set(invoice.contracts.map((row) => row.contract.siteName)),
+  ]
 
   return (
     <>
@@ -102,7 +114,8 @@ export default async function InvoicePrintPage({
 
         <div className="mb-3 text-sm">
           <span className="font-semibold">Mr. / Messrs:</span>{' '}
-          {invoice.customer.name}
+          <span className="font-bold">{invoice.customer.name}</span>
+          {sites.length > 0 && <span> ({sites.join(', ')})</span>}
         </div>
 
         <table className="w-full border-collapse border border-black text-sm">
@@ -125,28 +138,53 @@ export default async function InvoicePrintPage({
             </tr>
           </thead>
           <tbody>
-            {invoice.lineItems.map((line, index) => (
-              <tr key={line.id}>
-                <td className="border border-black px-1 py-1 text-center">
-                  {index + 1}
-                </td>
-                <td className="border border-black px-2 py-1">
-                  {line.description}
-                </td>
-                <td className="border border-black px-1 py-1 text-center">
-                  {line.uom}
-                </td>
-                <td className="border border-black px-1 py-1 text-right">
-                  {line.quantity}
-                </td>
-                <td className="border border-black px-1 py-1 text-right">
-                  {formatAmountExact(line.unitRate)}
-                </td>
-                <td className="border border-black px-1 py-1 text-right">
-                  {formatAmountExact(line.amount)}
-                </td>
-              </tr>
-            ))}
+            {invoice.lineItems.map((line, index) => {
+              const reg = line.equipmentAssignment?.equipment.plateNumber
+              const hasSubRow = !!line.periodStart || !!reg
+
+              return (
+                <Fragment key={line.id}>
+                  <tr>
+                    <td className="border border-black px-1 py-1 text-center align-top">
+                      {index + 1}.
+                    </td>
+                    <td className="border border-black px-2 py-1 font-semibold">
+                      {line.description}
+                    </td>
+                    <td className="border border-black px-1 py-1 text-center">
+                      {line.uom}
+                    </td>
+                    <td className="border border-black px-1 py-1 text-right">
+                      {line.quantity}
+                    </td>
+                    <td className="border border-black px-1 py-1 text-right">
+                      {formatAmountExact(line.unitRate)}
+                    </td>
+                    <td className="border border-black px-1 py-1 text-right">
+                      {formatAmountExact(line.amount)}
+                    </td>
+                  </tr>
+
+                  {/* The dates and registration sit on their own row under the
+                      description, exactly as the handwritten invoices do. */}
+                  {hasSubRow && (
+                    <tr>
+                      <td className="border border-black px-1 py-1">&nbsp;</td>
+                      <td className="border border-black px-2 py-1 font-semibold">
+                        {line.periodStart && line.periodEnd
+                          ? `From ${shortDate(line.periodStart)} To ${shortDate(line.periodEnd)}`
+                          : ''}
+                        {reg ? ` - (Reg. No. ${reg})` : ''}
+                      </td>
+                      <td className="border border-black px-1 py-1">&nbsp;</td>
+                      <td className="border border-black px-1 py-1">&nbsp;</td>
+                      <td className="border border-black px-1 py-1">&nbsp;</td>
+                      <td className="border border-black px-1 py-1">&nbsp;</td>
+                    </tr>
+                  )}
+                </Fragment>
+              )
+            })}
 
             {Array.from({ length: blankRows }).map((_, index) => (
               <tr key={`blank-${index}`}>
@@ -164,7 +202,7 @@ export default async function InvoicePrintPage({
                 colSpan={5}
                 className="border border-black px-2 py-2 font-bold"
               >
-                TOTAL QAR
+                TOTAL QAR {amountInWords(invoice.totalAmount)}
               </td>
               <td className="border border-black px-1 py-2 text-right font-bold">
                 {formatAmountExact(invoice.totalAmount)}

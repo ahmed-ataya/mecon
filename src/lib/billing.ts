@@ -1,25 +1,31 @@
-import { inclusiveDayCount, formatDate } from './dates'
+import { formatDate, inclusiveDayCount } from './dates'
 import {
   RATE_TYPE_DAYS,
+  RATE_TYPE_HOURS,
   RATE_TYPE_LABELS,
-  RATE_TYPE_UOM,
   type RateType,
   type Uom,
 } from './enums'
-import { formatQar } from './money'
+import { formatQar, hourlyRate } from './money'
 import type { Warning } from './warnings'
 
 /**
  * Works out what a contract should be invoiced for over a period.
  *
- * The whole point is that it WALKS THE ASSIGNMENT HISTORY rather than assuming
- * one machine covered the period. If a machine broke down on the 7th and its
- * replacement started on the 8th, the period produces two lines with each
- * machine's actual days — which is what keeps billing continuous across a swap
- * and is why replacements close-and-open rather than overwrite.
+ * EVERYTHING IS BILLED IN HOURS. The agreed daily, weekly or monthly rate is
+ * converted to an hourly one — 10, 60 and 260 hours respectively — and the
+ * line is hours times that rate. Pro rata therefore needs no special case: a
+ * part period is simply fewer hours at the same rate.
  *
- * Nothing here writes to the database. It computes a proposal; the caller
- * decides whether to save it as a draft invoice.
+ * ONE LINE PER MACHINE, covering machine and operator together, because the
+ * customer is quoted a single rate for both: "Hire of Roller (3 Ton) with
+ * Operator".
+ *
+ * It still WALKS THE ASSIGNMENT HISTORY. A machine replaced mid-period
+ * produces one line per machine with its own dates, which is what keeps
+ * billing continuous across a swap.
+ *
+ * Nothing here writes to the database. It proposes; the caller decides.
  */
 
 type Period = { start: Date; end: Date }
@@ -36,21 +42,20 @@ type EquipmentAssignmentLike = {
   endDate: Date | null
   rateType: string
   rateAmount: number
-  equipment: { name: string }
+  equipment: {
+    name: string
+    type: string
+    plateNumber: string | null
+    capacityValue: number | null
+    capacityUnit: string | null
+  }
   offHirePeriods: OffHire[]
 }
 
 type OperatorAssignmentLike = {
-  id: string
   startDate: Date
   endDate: Date | null
   arrangement: string
-  operatorHourlyCost: number | null
-  operatorHourlyRebill: number | null
-  overtimeMultiplier: number
-  normalHoursPerDay: number
-  overtimeHoursPerDay: number
-  operator: { name: string } | null
 }
 
 export type ProposedLine = {
@@ -61,7 +66,11 @@ export type ProposedLine = {
   unitRate: number
   amount: number
   equipmentAssignmentId?: string
-  operatorAssignmentId?: string
+  periodStart?: Date
+  periodEnd?: Date
+  hours?: number
+  /** Days on hire in this span — the starting point for entering real hours. */
+  billableDays?: number
 }
 
 export type BillingProposal = {
@@ -70,7 +79,7 @@ export type BillingProposal = {
   warnings: Warning[]
 }
 
-/** Days the two ranges share, inclusive at both ends. Zero if they miss. */
+/** Days the two ranges share, inclusive at both ends. Null if they miss. */
 function overlapDays(
   aStart: Date,
   aEnd: Date | null,
@@ -78,7 +87,6 @@ function overlapDays(
   bEnd: Date,
 ): { days: number; from: Date; to: Date } | null {
   const from = aStart.getTime() > bStart.getTime() ? aStart : bStart
-  // A null end means open-ended, so the period's end is the binding one.
   const aFinish = aEnd ?? bEnd
   const to = aFinish.getTime() < bEnd.getTime() ? aFinish : bEnd
 
@@ -87,64 +95,63 @@ function overlapDays(
   return { days: inclusiveDayCount(from, to), from, to }
 }
 
-/**
- * Days lost to off hire inside a window.
- *
- * Off-hire stretches are assumed not to overlap each other — they describe the
- * same machine standing idle, so two at once would be a data-entry error
- * rather than a case to handle.
- */
-function offHireDaysWithin(
-  offHires: OffHire[],
-  from: Date,
-  to: Date,
-): { days: number; reasons: string[] } {
+function offHireDaysWithin(offHires: OffHire[], from: Date, to: Date): number {
   let days = 0
-  const reasons: string[] = []
 
   for (const offHire of offHires) {
     const overlap = overlapDays(offHire.startDate, offHire.endDate, from, to)
-    if (!overlap) continue
-
-    days += overlap.days
-    reasons.push(offHire.reason)
+    if (overlap) days += overlap.days
   }
 
-  return { days, reasons }
+  return days
+}
+
+/** DD-MM-YYYY, the format used inside the line descriptions. */
+export function shortDate(date: Date): string {
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+  return `${day}-${month}-${date.getUTCFullYear()}`
 }
 
 /**
- * Quantity in the rate's own units — 12 days on a monthly rate is 0.4 months.
+ * The PARTICULARS text, matching how the invoices are written by hand:
  *
- * Prorating like this is the honest default, but it is exactly where money
- * goes missing: 0.4 of a monthly rate is usually less than 12 days at the
- * daily rate. That is what rateTierWarning exists to catch, and why the
- * manager can override the rate before issuing.
+ *   "Hire of Wheel Excavator (20 Ton) with Operator"
+ *   "Hire of Roller (3 Ton) with Operator"
+ *   "Hire of Backhoe Loader (4 Ton) — Without Operator"
  */
-function quantityInRateUnits(billableDays: number, rateType: RateType): number {
-  const perUnit = RATE_TYPE_DAYS[rateType]
+export function describeHire(
+  equipment: EquipmentAssignmentLike['equipment'],
+  arrangement: string | null,
+): string {
+  const capacity =
+    equipment.capacityValue !== null
+      ? ` (${equipment.capacityValue} ${
+          equipment.capacityUnit === 'METRE' ? 'M' : 'Ton'
+        })`
+      : ''
 
-  // Two decimals is enough to read, and the amount is rounded to halalas
-  // afterwards anyway.
-  return Math.round((billableDays / perUnit) * 100) / 100
+  const operator =
+    arrangement === 'WITHOUT_OPERATOR' || arrangement === null
+      ? ' — Without Operator'
+      : ' with Operator'
+
+  return `Hire of ${equipment.type}${capacity}${operator}`
 }
 
 /**
- * Fires when a machine is billed on a rate covering MORE days than it actually
- * worked — a monthly rate for 12 days.
+ * Fires when a machine is billed on a rate covering MORE days than it worked.
  *
- * Deliberately one-directional. A daily rate running for months is not flagged:
- * the customer simply pays more, which costs the business nothing. Only the
- * downward mismatch leaves money on the table.
+ * One-directional on purpose. A daily rate running for months is never
+ * flagged: the customer simply pays more, which costs the business nothing.
+ * Only the downward mismatch leaves money on the table.
  */
 function rateTierWarning(
   equipmentName: string,
   rateType: RateType,
   billableDays: number,
-  proratedAmount: number,
 ): Warning | null {
   const perUnit = RATE_TYPE_DAYS[rateType]
-
   if (billableDays >= perUnit) return null
 
   return {
@@ -152,9 +159,8 @@ function rateTierWarning(
     severity: 'AMBER',
     message:
       `${equipmentName} is on a ${RATE_TYPE_LABELS[rateType].toLowerCase()} rate ` +
-      `but worked only ${billableDays} day${billableDays === 1 ? '' : 's'}. ` +
-      `Prorated that is ${formatQar(proratedAmount)} — check a shorter rate ` +
-      `would not bill higher before issuing.`,
+      `but was on hire only ${billableDays} day${billableDays === 1 ? '' : 's'} ` +
+      `in this period. Check a shorter rate would not bill higher.`,
   }
 }
 
@@ -176,30 +182,20 @@ export function buildProposal({
 }: {
   period: Period
   /**
-   * The contract's own span. The period is clamped to it, because an
-   * assignment left open does NOT mean the hire continued: a contract closing
-   * on the 5th stops billing on the 5th even if nobody set an end date on the
-   * machine. Without this a closed contract keeps billing every month and
-   * overcharges the customer.
+   * The contract's own span. The period is clamped to it: an assignment left
+   * open does NOT mean the hire continued, and a contract closing on the 5th
+   * stops billing on the 5th.
    */
   contract?: { mobilizationDate: Date; closingDate: Date | null }
   equipmentAssignments: EquipmentAssignmentLike[]
   operatorAssignments: OperatorAssignmentLike[]
   mobilization?: MobilizationLike
-  /**
-   * Mobilization normally lands on the FIRST invoice for a contract and
-   * de-mobilization on the LAST. Short daily and weekly hires are the
-   * exception — de-mob is often billed up front because everyone knows the
-   * machine is coming back within the month. So both are opt-in per invoice
-   * rather than inferred, and the caller decides the default.
-   */
   includeMobilization?: boolean
   includeDemobilization?: boolean
 }): BillingProposal {
   const lines: ProposedLine[] = []
   const warnings: Warning[] = []
 
-  // Clamp to the contract. Nothing before mobilization, nothing after closing.
   const start =
     contract && contract.mobilizationDate.getTime() > requestedPeriod.start.getTime()
       ? contract.mobilizationDate
@@ -211,14 +207,11 @@ export function buildProposal({
       ? contract.closingDate
       : requestedPeriod.end
 
-  // The whole requested period falls outside the contract's life.
   if (start.getTime() > end.getTime()) {
     return { lines: [], total: 0, warnings: [] }
   }
 
   const period: Period = { start, end }
-
-  // --- Equipment ----------------------------------------------------------
 
   for (const assignment of equipmentAssignments) {
     const overlap = overlapDays(
@@ -234,173 +227,109 @@ export function buildProposal({
       overlap.from,
       overlap.to,
     )
-    const billableDays = Math.max(0, overlap.days - offHire.days)
+    const billableDays = Math.max(0, overlap.days - offHire)
+
+    // Which operator arrangement was running over this span decides whether
+    // the line reads "with Operator" or "Without Operator".
+    const arrangement =
+      operatorAssignments.find((operator) =>
+        overlapDays(operator.startDate, operator.endDate, overlap.from, overlap.to),
+      )?.arrangement ?? null
 
     const rateType = assignment.rateType as RateType
-    const quantity = quantityInRateUnits(billableDays, rateType)
-    const amount = Math.round(quantity * assignment.rateAmount)
+    const rate = hourlyRate(assignment.rateAmount, RATE_TYPE_HOURS[rateType])
+
+    // A STARTING POINT only. Real hours come from the timesheet and are
+    // entered on the draft — the calendar cannot know them, which is why a
+    // 23-day hire invoiced as 162.5 hours rather than 230.
+    const suggestedHours = billableDays * RATE_TYPE_HOURS.PER_DAY
 
     lines.push({
       kind: 'EQUIPMENT',
-      description:
-        `${assignment.equipment.name} — ${formatDate(overlap.from)} to ${formatDate(overlap.to)}` +
-        (offHire.days > 0
-          ? ` (${billableDays} billable of ${overlap.days} days, ${offHire.days} off hire)`
-          : ''),
-      uom: RATE_TYPE_UOM[rateType],
-      quantity,
-      unitRate: assignment.rateAmount,
-      amount,
+      description: describeHire(assignment.equipment, arrangement),
+      uom: 'Hours',
+      quantity: suggestedHours,
+      unitRate: rate,
+      amount: Math.round(suggestedHours * rate),
       equipmentAssignmentId: assignment.id,
+      periodStart: overlap.from,
+      periodEnd: overlap.to,
+      hours: suggestedHours,
+      billableDays,
     })
 
-    if (offHire.days > 0) {
+    if (offHire > 0) {
       warnings.push({
         code: 'OFF_HIRE_DEDUCTED',
         severity: 'AMBER',
-        message: `${assignment.equipment.name}: ${offHire.days} off-hire day${
-          offHire.days === 1 ? '' : 's'
-        } deducted from this period.`,
+        message: `${assignment.equipment.name}: ${offHire} off-hire day${
+          offHire === 1 ? '' : 's'
+        } excluded from the suggested hours.`,
       })
     }
 
     if (billableDays > 0) {
-      const tier = rateTierWarning(
-        assignment.equipment.name,
-        rateType,
-        billableDays,
-        amount,
-      )
+      const tier = rateTierWarning(assignment.equipment.name, rateType, billableDays)
       if (tier) warnings.push(tier)
     }
   }
 
-  // --- Operators ----------------------------------------------------------
+  if (lines.length > 0) {
+    warnings.push({
+      code: 'HOURS_ARE_ESTIMATED',
+      severity: 'AMBER',
+      message:
+        'Hours are a starting estimate of days on hire × 10. Replace them with the timesheet figures before issuing.',
+    })
+  }
+
+  // --- Mobilization -------------------------------------------------------
   //
-  // Operators are priced per hour, so days worked are converted using the
-  // contract's own assumption — normally 8 normal hours plus about 2 overtime,
-  // with overtime at the multiplier. Real timesheets will replace the
-  // assumption later without changing this arithmetic.
+  // Charged together as a single lump sum when both apply, which is how the
+  // invoices read: "Mobilization And Demobilization Charge ... LS 1 1,200.00".
 
-  for (const assignment of operatorAssignments) {
-    if (assignment.arrangement === 'WITHOUT_OPERATOR') continue
-    if (assignment.operatorHourlyRebill === null) continue
+  const wantsMob =
+    includeMobilization && mobilization?.mobilizationCharge === 'CHARGED'
+  const wantsDemob =
+    includeDemobilization && mobilization?.demobilizationCharge === 'CHARGED'
 
-    const overlap = overlapDays(
-      assignment.startDate,
-      assignment.endDate,
-      period.start,
-      period.end,
-    )
-    if (!overlap) continue
+  if (wantsMob || wantsDemob) {
+    const amount =
+      (wantsMob ? (mobilization!.mobilizationAmount ?? 0) : 0) +
+      (wantsDemob ? (mobilization!.demobilizationAmount ?? 0) : 0)
 
-    // A machine standing off hire is not being operated, so the same days come
-    // off the operator. Stated here because it is an assumption, not a fact.
-    const machineOffHire = equipmentAssignments.flatMap(
-      (equipment) => equipment.offHirePeriods,
-    )
-    const offHire = offHireDaysWithin(machineOffHire, overlap.from, overlap.to)
-    const workedDays = Math.max(0, overlap.days - offHire.days)
+    const label =
+      wantsMob && wantsDemob
+        ? 'Mobilization And Demobilization Charge'
+        : wantsMob
+          ? 'Mobilization Charge'
+          : 'Demobilization Charge'
 
-    const rate = assignment.operatorHourlyRebill
-    const normalHours = workedDays * assignment.normalHoursPerDay
-    const overtimeHours = workedDays * assignment.overtimeHoursPerDay
+    lines.push({
+      kind: wantsMob ? 'MOBILIZATION' : 'DEMOBILIZATION',
+      description: label,
+      uom: 'LS',
+      quantity: 1,
+      unitRate: amount,
+      amount,
+    })
 
-    if (normalHours > 0) {
-      lines.push({
-        kind: 'OPERATOR_REBILL',
-        description: `${assignment.operator?.name ?? 'Operator'} — ${workedDays} day${
-          workedDays === 1 ? '' : 's'
-        } at ${assignment.normalHoursPerDay} hrs`,
-        uom: 'Hour',
-        quantity: normalHours,
-        unitRate: rate,
-        amount: Math.round(normalHours * rate),
-        operatorAssignmentId: assignment.id,
-      })
-    }
-
-    if (overtimeHours > 0) {
-      const overtimeRate = Math.round(rate * assignment.overtimeMultiplier)
-
-      lines.push({
-        kind: 'OPERATOR_REBILL',
-        description: `${assignment.operator?.name ?? 'Operator'} — overtime at ${
-          assignment.overtimeMultiplier
-        }×`,
-        uom: 'Hour',
-        quantity: overtimeHours,
-        unitRate: overtimeRate,
-        amount: Math.round(overtimeHours * overtimeRate),
-        operatorAssignmentId: assignment.id,
+    if (amount === 0) {
+      warnings.push({
+        code: 'MOBILIZATION_AMOUNT_MISSING',
+        severity: 'AMBER',
+        message: `${label} has no amount recorded and will bill as zero. The figure comes from the quotation.`,
       })
     }
   }
 
-  // --- Mobilization ------------------------------------------------------
-  //
-  // Always last on the invoice, matching how the printed form is filled in.
-
-  if (includeMobilization && mobilization) {
-    if (mobilization.mobilizationCharge === 'CHARGED') {
-      const amount = mobilization.mobilizationAmount ?? 0
-
-      lines.push({
-        kind: 'MOBILIZATION',
-        description: 'Mobilization',
-        uom: 'Lump sum',
-        quantity: 1,
-        unitRate: amount,
-        amount,
-      })
-
-      if (mobilization.mobilizationAmount === null) {
-        warnings.push({
-          code: 'MOBILIZATION_AMOUNT_MISSING',
-          severity: 'AMBER',
-          message:
-            'Mobilization is charged but no amount is recorded — it will bill as zero. The figure comes from the quotation.',
-        })
-      }
-    } else {
-      warnings.push({
-        code: 'MOBILIZATION_NOT_CHARGEABLE',
-        severity: 'AMBER',
-        message:
-          'Mobilization was asked for but this contract mobilizes free of charge, so no line was added.',
-      })
-    }
-  }
-
-  if (includeDemobilization && mobilization) {
-    if (mobilization.demobilizationCharge === 'CHARGED') {
-      const amount = mobilization.demobilizationAmount ?? 0
-
-      lines.push({
-        kind: 'DEMOBILIZATION',
-        description: 'De-mobilization',
-        uom: 'Lump sum',
-        quantity: 1,
-        unitRate: amount,
-        amount,
-      })
-
-      if (mobilization.demobilizationAmount === null) {
-        warnings.push({
-          code: 'DEMOBILIZATION_AMOUNT_MISSING',
-          severity: 'AMBER',
-          message:
-            'De-mobilization is charged but no amount is recorded — it will bill as zero.',
-        })
-      }
-    } else {
-      warnings.push({
-        code: 'DEMOBILIZATION_NOT_CHARGEABLE',
-        severity: 'AMBER',
-        message:
-          'De-mobilization was asked for but this contract de-mobilizes free of charge, so no line was added.',
-      })
-    }
+  if (includeMobilization && mobilization?.mobilizationCharge !== 'CHARGED') {
+    warnings.push({
+      code: 'MOBILIZATION_NOT_CHARGEABLE',
+      severity: 'AMBER',
+      message:
+        'Mobilization was asked for but this contract mobilizes free of charge, so no line was added.',
+    })
   }
 
   const total = lines.reduce((sum, line) => sum + line.amount, 0)
@@ -411,12 +340,9 @@ export function buildProposal({
 /**
  * Splits a span into calendar-month periods.
  *
- * Most invoicing here is monthly — a customer hiring from 1 Aug to 15 Oct
- * usually wants an August, a September and an October invoice. Some want one
- * invoice for the whole span instead, which is simply not calling this.
- *
- * Months are clipped to the span, so the first and last are part months rather
- * than whole ones.
+ * Most invoicing here is monthly. A single invoice CAN still carry two spans
+ * as separate lines — 16-30 June and 1-11 July on one invoice — which is what
+ * NOT calling this produces.
  */
 export function splitIntoMonths(start: Date, end: Date): Period[] {
   const periods: Period[] = []
@@ -431,7 +357,11 @@ export function splitIntoMonths(start: Date, end: Date): Period[] {
     periods.push({ start: cursor, end: periodEnd })
 
     cursor = new Date(
-      Date.UTC(periodEnd.getUTCFullYear(), periodEnd.getUTCMonth(), periodEnd.getUTCDate() + 1),
+      Date.UTC(
+        periodEnd.getUTCFullYear(),
+        periodEnd.getUTCMonth(),
+        periodEnd.getUTCDate() + 1,
+      ),
     )
   }
 
@@ -439,35 +369,7 @@ export function splitIntoMonths(start: Date, end: Date): Period[] {
 }
 
 /**
- * Invoicing dated after the LPO has expired.
- *
- * An open expiry can never be breached, so it is never checked. A closed one
- * is: raising an invoice against a lapsed LPO is how work ends up unpayable.
- */
-export function lpoExpiryWarning(
-  lpo: { number: string; validity: Date | null } | null,
-  invoiceDate: Date,
-): Warning | null {
-  if (!lpo?.validity) return null
-  if (invoiceDate.getTime() <= lpo.validity.getTime()) return null
-
-  return {
-    code: 'INVOICE_AFTER_LPO_EXPIRY',
-    severity: 'RED',
-    message: `This invoice is dated ${formatDate(invoiceDate)}, after LPO ${
-      lpo.number
-    } expired on ${formatDate(lpo.validity)}.`,
-  }
-}
-
-/**
- * Consumption against an LPO.
- *
- * Totalled across EVERY contract under the LPO, not per contract. One LPO
- * commonly covers several machines and each machine is its own contract, so a
- * per-contract total would read a fraction of the truth and the ceiling would
- * be passed without anyone noticing.
- *
+ * Consumption against an LPO, totalled across EVERY contract under it.
  * Drafts are excluded — nothing is consumed until an invoice is issued.
  */
 export function lpoConsumption(
@@ -478,8 +380,6 @@ export function lpoConsumption(
     .filter((invoice) => invoice.status !== 'DRAFT')
     .reduce((sum, invoice) => sum + invoice.totalAmount, 0)
 
-  // An open LPO has no ceiling, so there is nothing to consume against and a
-  // warning would be meaningless.
   if (lpo.amount === null) {
     return { invoiced, remaining: null, warning: null }
   }
@@ -516,4 +416,24 @@ export function lpoConsumption(
   }
 
   return { invoiced, remaining, warning: null }
+}
+
+/**
+ * Invoicing dated after the LPO has expired. An open expiry can never be
+ * breached, so it is never checked.
+ */
+export function lpoExpiryWarning(
+  lpo: { number: string; validity: Date | null } | null,
+  invoiceDate: Date,
+): Warning | null {
+  if (!lpo?.validity) return null
+  if (invoiceDate.getTime() <= lpo.validity.getTime()) return null
+
+  return {
+    code: 'INVOICE_AFTER_LPO_EXPIRY',
+    severity: 'RED',
+    message: `This invoice is dated ${formatDate(invoiceDate)}, after LPO ${
+      lpo.number
+    } expired on ${formatDate(lpo.validity)}.`,
+  }
 }

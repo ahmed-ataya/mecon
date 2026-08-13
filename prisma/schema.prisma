@@ -468,20 +468,12 @@ model OperatorAssignment {
   /// | SCHEDULED_SWAP | OTHER
   reason String @default("INITIAL")
 
-  /// Operators are priced PER HOUR, unlike machines. Both figures are integer
-  /// halalas per hour, and both are kept so margin stays visible.
-  operatorHourlyCost   Int?
-  operatorHourlyRebill Int?
-
-  /// Overtime is the same hourly rate times this factor. 1.25 is the usual
-  /// Qatar figure; it sits per assignment because it is negotiated per hire.
-  overtimeMultiplier Float @default(1.25)
-
-  /// The working-day assumption used until real timesheets arrive: a normal
-  /// day is 8 hours plus about 2 overtime. Both are per assignment so an
-  /// unusual hire is not forced into the standard shape.
-  normalHoursPerDay Float @default(8)
-  overtimeHoursPerDay Float @default(2)
+  /// What we pay a subcontracted market operator, in integer halalas per hour.
+  ///
+  /// There is no matching "rebill": the customer is charged ONE rate covering
+  /// machine and operator together, which lives on the equipment assignment.
+  /// Margin is that rate minus this cost.
+  operatorHourlyCost Int?
 
   note String?
 
@@ -573,10 +565,24 @@ model InvoiceLineItem {
   /// The "PARTICULARS" column on the printed form.
   description String
 
-  /// The "UOM" column — Day / Week / Month / Hour / Lump sum. Stored on the
-  /// line rather than derived, because an invoice must still print correctly
-  /// years later even if the contract's rate type has since been changed.
+  /// The "UOM" column — Hours or LS (lump sum). Stored on the line rather than
+  /// derived, because an invoice must still print correctly years later even
+  /// if the contract's rate type has since been changed.
   uom String
+
+  /// The span this line covers, printed under the description as
+  /// "From 01-07-2026 To 31-07-2026".
+  ///
+  /// Per LINE, not per invoice: a single invoice routinely bills two separate
+  /// spans — 16-30 June and 1-11 July appear as two lines on one invoice.
+  /// Null on a lump-sum line, which covers no period.
+  periodStart DateTime?
+  periodEnd   DateTime?
+
+  /// Hours actually worked, from the timesheet. Nothing can derive this: the
+  /// calendar says 23 days but the invoice says 162.5 hours, because the
+  /// machine did not work every hour of every day.
+  hours Float?
 
   /// Traceability back to the assignment history this line was derived from
   equipmentAssignmentId String?

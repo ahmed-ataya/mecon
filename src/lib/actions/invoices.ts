@@ -52,6 +52,22 @@ const contractInclude = {
   },
 } as const
 
+/** Strips the fields that exist only to help the caller, not the database. */
+function toLineData(line: ProposedLine) {
+  return {
+    kind: line.kind,
+    description: line.description,
+    uom: line.uom,
+    quantity: line.quantity,
+    unitRate: line.unitRate,
+    amount: line.amount,
+    equipmentAssignmentId: line.equipmentAssignmentId,
+    periodStart: line.periodStart,
+    periodEnd: line.periodEnd,
+    hours: line.hours,
+  }
+}
+
 /**
  * Creates one or more DRAFT invoices.
  *
@@ -151,7 +167,7 @@ export async function createInvoices(
           contracts: {
             create: group.map((contract) => ({ contractId: contract.id })),
           },
-          lineItems: { create: lines },
+          lineItems: { create: lines.map(toLineData) },
         },
       })
 

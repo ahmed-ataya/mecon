@@ -425,19 +425,6 @@ export function ContractForm({
               />
             </Field>
 
-            <Field
-              label="Operator rebill (QAR/hour)"
-              htmlFor="operatorHourlyRebill"
-              hint="What we charge the customer. Both kept so margin is visible."
-            >
-              <input
-                id="operatorHourlyRebill"
-                name="operatorHourlyRebill"
-                inputMode="decimal"
-                defaultValue={values.operatorHourlyRebill ?? ''}
-                className={inputClass}
-              />
-            </Field>
           </div>
         )}
       </section>

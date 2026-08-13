@@ -566,9 +566,10 @@ async function main() {
             arrangement: 'MARKET_OPERATOR',
             startDate: d('2026-07-15'),
             reason: 'INITIAL',
-            // Per hour now, not per month
+            // What we pay the market operator. The customer pays the single
+            // combined rate on the equipment assignment, so there is no
+            // separate rebill — margin is that rate minus this.
             operatorHourlyCost: 52_50,
-            operatorHourlyRebill: 70_00,
           },
         ],
       },
