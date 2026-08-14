@@ -5,6 +5,10 @@ import { redirect } from 'next/navigation'
 import { db } from '../db'
 import { buildProposal, splitIntoMonths, type ProposedLine } from '../billing'
 import { parseDateInput, todayUtc } from '../dates'
+import {
+  formatSystemInvoiceNumber,
+  nextSystemSequence,
+} from '../invoice-number'
 
 export type ActionState = {
   errors?: Record<string, string>
@@ -22,23 +26,21 @@ function readForm(formData: FormData): Record<string, string> {
 }
 
 /**
- * The next rolling invoice number.
+ * The next position in the system sequence — see src/lib/invoice-number.ts for
+ * why system numbers lead with a 5 and pad numbers with a 1.
  *
- * Numbers come off a paper pad today, so this only suggests: the draft's number
- * stays editable until issue, letting the sequence be aligned with wherever the
- * pad has reached. The unique constraint is what actually prevents a clash.
+ * Only ever a suggestion: the draft's number stays editable until issue, so an
+ * invoice that has to match a pre-printed form can carry the pad's number
+ * instead. The unique constraint is what actually prevents a clash.
  */
-export async function nextInvoiceNumber(): Promise<string> {
+async function nextSequence(): Promise<number> {
   const invoices = await db.invoice.findMany({ select: { invoiceNumber: true } })
 
-  const highest = invoices.reduce((max, invoice) => {
-    // Ignore anything not purely numeric so a hand-typed "2026/A-12" cannot
-    // poison the sequence.
-    const parsed = Number(invoice.invoiceNumber)
-    return Number.isInteger(parsed) && parsed > max ? parsed : max
-  }, 0)
+  return nextSystemSequence(invoices.map((invoice) => invoice.invoiceNumber))
+}
 
-  return String(highest + 1)
+export async function nextInvoiceNumber(): Promise<string> {
+  return formatSystemInvoiceNumber(await nextSequence())
 }
 
 const contractInclude = {
@@ -97,7 +99,10 @@ export async function createInvoices(
 
   if (Object.keys(errors).length > 0) return { errors, values }
 
-  const splitMonthly = formData.get('splitMonthly') !== null
+  // NONE               one invoice, one line per machine for the whole span
+  // MONTHLY_LINES      one invoice, a line per calendar month
+  // SEPARATE_INVOICES  an invoice per calendar month
+  const periodSplit = values.periodSplit ?? 'NONE'
   const combine = formData.get('combine') !== null
   const includeMobilization = formData.get('includeMobilization') !== null
   const includeDemobilization = formData.get('includeDemobilization') !== null
@@ -124,55 +129,122 @@ export async function createInvoices(
     }
   }
 
-  const periods = splitMonthly
-    ? splitIntoMonths(start!, end!)
-    : [{ start: start!, end: end! }]
+  const whole = { start: start!, end: end! }
+
+  // Only SEPARATE_INVOICES multiplies the invoices. MONTHLY_LINES keeps one
+  // invoice and splits it inside — which is how 16-30 Jun and 1-11 Jul come to
+  // sit on a single invoice as two lines.
+  const invoicePeriods =
+    periodSplit === 'SEPARATE_INVOICES' ? splitIntoMonths(whole.start, whole.end) : [whole]
 
   // Grouped per invoice: either all contracts together, or one each.
   const groups = combine ? [contracts] : contracts.map((contract) => [contract])
 
-  let sequence = Number(await nextInvoiceNumber())
-  const created: string[] = []
+  type Contracts = typeof contracts
+  type Pending = {
+    period: { start: Date; end: Date }
+    group: Contracts
+    lines: ProposedLine[]
+  }
 
-  for (const period of periods) {
+  const pending: Pending[] = []
+
+  for (const period of invoicePeriods) {
     for (const group of groups) {
       const lines: ProposedLine[] = []
 
       for (const contract of group) {
-        const proposal = buildProposal({
-          period,
-          contract,
-          equipmentAssignments: contract.equipmentAssignments,
-          operatorAssignments: contract.operatorAssignments,
-          mobilization: contract,
-          includeMobilization,
-          includeDemobilization,
-        })
-        lines.push(...proposal.lines)
+        const linePeriods =
+          periodSplit === 'MONTHLY_LINES'
+            ? splitIntoMonths(period.start, period.end)
+            : [period]
+
+        for (const linePeriod of linePeriods) {
+          const proposal = buildProposal({
+            period: linePeriod,
+            contract,
+            equipmentAssignments: contract.equipmentAssignments,
+            operatorAssignments: contract.operatorAssignments,
+          })
+          lines.push(...proposal.lines)
+        }
       }
 
       // A period a contract was not running in produces nothing. Creating an
       // empty invoice would just be noise to delete later.
       if (lines.length === 0) continue
 
-      const invoice = await db.invoice.create({
-        data: {
-          customerId,
-          lpoId: group[0].lpoId,
-          invoiceNumber: String(sequence++),
-          periodStart: period.start,
-          periodEnd: period.end,
-          totalAmount: lines.reduce((sum, line) => sum + line.amount, 0),
-          status: 'DRAFT',
-          contracts: {
-            create: group.map((contract) => ({ contractId: contract.id })),
-          },
-          lineItems: { create: lines.map(toLineData) },
-        },
-      })
-
-      created.push(invoice.id)
+      pending.push({ period, group, lines })
     }
+  }
+
+  // Mobilization is charged ONCE per contract, however the span was split.
+  // Attached after the hire lines are known, so that:
+  //  - splitting into monthly invoices cannot charge for mobilizing again
+  //    every month
+  //  - both charges land on invoices that actually exist, rather than on a
+  //    trailing month the contract had already closed in
+  //  - the line prints below the hire lines, as the handwritten invoices read
+  if (includeMobilization || includeDemobilization) {
+    for (const contract of contracts) {
+      const holding = pending.filter((entry) =>
+        entry.group.some((member) => member.id === contract.id),
+      )
+      if (holding.length === 0) continue
+
+      const first = holding[0]
+      const last = holding[holding.length - 1]
+
+      const charge = (
+        target: Pending,
+        wantsMob: boolean,
+        wantsDemob: boolean,
+      ) => {
+        const proposal = buildProposal({
+          period: target.period,
+          contract,
+          equipmentAssignments: [],
+          operatorAssignments: [],
+          mobilization: contract,
+          includeMobilization: wantsMob,
+          includeDemobilization: wantsDemob,
+        })
+        target.lines.push(...proposal.lines)
+      }
+
+      // Landing on the same invoice, they print as one combined line —
+      // "Mobilization And Demobilization Charge" — which is what the real
+      // invoices show for a short hire.
+      if (includeMobilization && includeDemobilization && first === last) {
+        charge(first, true, true)
+      } else {
+        if (includeMobilization) charge(first, true, false)
+        if (includeDemobilization) charge(last, false, true)
+      }
+    }
+  }
+
+  let sequence = await nextSequence()
+  const created: string[] = []
+
+  for (const entry of pending) {
+    const invoice = await db.invoice.create({
+      data: {
+        customerId,
+        lpoId: entry.group[0].lpoId,
+        invoiceNumber: formatSystemInvoiceNumber(sequence++),
+        periodStart: entry.period.start,
+        periodEnd: entry.period.end,
+        totalAmount: entry.lines.reduce((sum, line) => sum + line.amount, 0),
+        status: 'DRAFT',
+        contracts: {
+          create: entry.group.map((contract) => ({ contractId: contract.id })),
+        },
+        lineItems: { create: entry.lines.map(toLineData) },
+      },
+    })
+
+    created.push(invoice.id)
   }
 
   if (created.length === 0) {

@@ -66,6 +66,41 @@ export function inclusiveDayCount(start: Date, end: Date): number {
   return Math.round((end.getTime() - start.getTime()) / MS_PER_DAY) + 1
 }
 
+/**
+ * The working week is Saturday to Thursday. Friday is the weekend here.
+ *
+ * This is not a display detail — it is the basis of every rate. A day is 10
+ * hours, a week is 6 x 10 = 60, and a month is 26 x 10 = 260. Counting Fridays
+ * would put the two out of step: a full July would estimate 31 x 10 = 310
+ * hours on a rate that defines a month as 260.
+ */
+const FRIDAY = 5
+
+export function isWorkingDay(date: Date): boolean {
+  return date.getUTCDay() !== FRIDAY
+}
+
+/**
+ * Working days between two dates, inclusive of both ends.
+ *
+ * Counted by subtracting the Fridays rather than by walking the range, so a
+ * span of any length costs the same.
+ */
+export function workingDayCount(start: Date, end: Date): number {
+  const total = inclusiveDayCount(start, end)
+  if (total <= 0) return 0
+
+  // How far the first Friday sits from the start, 0–6.
+  const toFirstFriday = (FRIDAY - start.getUTCDay() + 7) % 7
+
+  const fridays =
+    toFirstFriday >= total
+      ? 0
+      : Math.floor((total - 1 - toFirstFriday) / 7) + 1
+
+  return total - fridays
+}
+
 /** The day before `date`. Used when closing a replaced assignment. */
 export function dayBefore(date: Date): Date {
   return new Date(date.getTime() - MS_PER_DAY)

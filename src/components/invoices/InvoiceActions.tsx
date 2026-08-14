@@ -50,8 +50,11 @@ export function InvoiceActions({
         <div>
           <h2 className="font-semibold">Draft</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Set the number and due date, then issue. The number is suggested as
-            the next in sequence — change it to match the pad if you need to.
+            Set the number and due date, then issue. Numbers raised here lead
+            with a <span className="font-medium text-slate-700">5</span> so they
+            are distinguishable from the pad&rsquo;s, which lead with a 1 — the
+            trailing digits stay in step. Change it to match the pad if an
+            invoice has to go out on a pre-printed form.
           </p>
         </div>
 

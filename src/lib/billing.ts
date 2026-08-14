@@ -1,4 +1,4 @@
-import { formatDate, inclusiveDayCount } from './dates'
+import { formatDate, workingDayCount } from './dates'
 import {
   RATE_TYPE_DAYS,
   RATE_TYPE_HOURS,
@@ -6,6 +6,7 @@ import {
   type RateType,
   type Uom,
 } from './enums'
+import { effectiveCharge } from './mobilization'
 import { formatQar, hourlyRate } from './money'
 import type { Warning } from './warnings'
 
@@ -16,6 +17,10 @@ import type { Warning } from './warnings'
  * converted to an hourly one — 10, 60 and 260 hours respectively — and the
  * line is hours times that rate. Pro rata therefore needs no special case: a
  * part period is simply fewer hours at the same rate.
+ *
+ * DAYS ARE WORKING DAYS, Saturday to Thursday. Those same rates are built on a
+ * six-day week and a 26-day month, so counting Fridays here would put the day
+ * count and the rate out of step with each other.
  *
  * ONE LINE PER MACHINE, covering machine and operator together, because the
  * customer is quoted a single rate for both: "Hire of Roller (3 Ton) with
@@ -79,7 +84,13 @@ export type BillingProposal = {
   warnings: Warning[]
 }
 
-/** Days the two ranges share, inclusive at both ends. Null if they miss. */
+/**
+ * Days the two ranges share, inclusive at both ends. Null if they miss.
+ *
+ * `days` counts WORKING days — Saturday to Thursday — because that is what
+ * every rate is built on. Fridays are not billable days, so a hire spanning
+ * one is not a day longer for it.
+ */
 function overlapDays(
   aStart: Date,
   aEnd: Date | null,
@@ -92,9 +103,10 @@ function overlapDays(
 
   if (from.getTime() > to.getTime()) return null
 
-  return { days: inclusiveDayCount(from, to), from, to }
+  return { days: workingDayCount(from, to), from, to }
 }
 
+/** Also working days, so the deduction is in the same unit as the hire. */
 function offHireDaysWithin(offHires: OffHire[], from: Date, to: Date): number {
   let days = 0
 
@@ -159,12 +171,20 @@ function rateTierWarning(
     severity: 'AMBER',
     message:
       `${equipmentName} is on a ${RATE_TYPE_LABELS[rateType].toLowerCase()} rate ` +
-      `but was on hire only ${billableDays} day${billableDays === 1 ? '' : 's'} ` +
+      `but was on hire only ${billableDays} working day${billableDays === 1 ? '' : 's'} ` +
       `in this period. Check a shorter rate would not bill higher.`,
   }
 }
 
+/**
+ * The dates are here because whether mobilization is charged is DERIVED from
+ * the contract's duration — a blank charge field means "follow the rule", not
+ * "free". Reading the stored value alone would silently drop the charge on
+ * every contract nobody had explicitly overridden, which is most of them.
+ */
 type MobilizationLike = {
+  mobilizationDate: Date
+  closingDate: Date | null
   mobilizationCharge: string | null
   mobilizationAmount: number | null
   demobilizationCharge: string | null
@@ -242,6 +262,10 @@ export function buildProposal({
     // A STARTING POINT only. Real hours come from the timesheet and are
     // entered on the draft — the calendar cannot know them, which is why a
     // 23-day hire invoiced as 162.5 hours rather than 230.
+    //
+    // It is at least the right order of magnitude now: a full July is 26
+    // working days, so 260 hours against the 255 actually invoiced. Counting
+    // Fridays would have suggested 310.
     const suggestedHours = billableDays * RATE_TYPE_HOURS.PER_DAY
 
     lines.push({
@@ -262,7 +286,7 @@ export function buildProposal({
       warnings.push({
         code: 'OFF_HIRE_DEDUCTED',
         severity: 'AMBER',
-        message: `${assignment.equipment.name}: ${offHire} off-hire day${
+        message: `${assignment.equipment.name}: ${offHire} off-hire working day${
           offHire === 1 ? '' : 's'
         } excluded from the suggested hours.`,
       })
@@ -279,7 +303,7 @@ export function buildProposal({
       code: 'HOURS_ARE_ESTIMATED',
       severity: 'AMBER',
       message:
-        'Hours are a starting estimate of days on hire × 10. Replace them with the timesheet figures before issuing.',
+        'Hours are a starting estimate — working days on hire (Sat–Thu) × 10. Replace them with the timesheet figures before issuing.',
     })
   }
 
@@ -288,10 +312,21 @@ export function buildProposal({
   // Charged together as a single lump sum when both apply, which is how the
   // invoices read: "Mobilization And Demobilization Charge ... LS 1 1,200.00".
 
-  const wantsMob =
-    includeMobilization && mobilization?.mobilizationCharge === 'CHARGED'
+  const chargeable = mobilization
+    ? {
+        mobilization: effectiveCharge(mobilization),
+        // De-mobilization follows the same duration rule, with its own override.
+        demobilization: effectiveCharge({
+          mobilizationDate: mobilization.mobilizationDate,
+          closingDate: mobilization.closingDate,
+          mobilizationCharge: mobilization.demobilizationCharge,
+        }),
+      }
+    : null
+
+  const wantsMob = includeMobilization && chargeable?.mobilization === 'CHARGED'
   const wantsDemob =
-    includeDemobilization && mobilization?.demobilizationCharge === 'CHARGED'
+    includeDemobilization && chargeable?.demobilization === 'CHARGED'
 
   if (wantsMob || wantsDemob) {
     const amount =
@@ -323,7 +358,7 @@ export function buildProposal({
     }
   }
 
-  if (includeMobilization && mobilization?.mobilizationCharge !== 'CHARGED') {
+  if (includeMobilization && chargeable?.mobilization !== 'CHARGED') {
     warnings.push({
       code: 'MOBILIZATION_NOT_CHARGEABLE',
       severity: 'AMBER',

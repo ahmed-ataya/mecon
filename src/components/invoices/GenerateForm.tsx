@@ -67,6 +67,44 @@ function nextUninvoicedFrom(contract: ContractChoice): Date | null {
   return from
 }
 
+/** One option in the how-to-split-the-period choice. */
+function SplitChoice({
+  value,
+  checked,
+  onChange,
+  label,
+  hint,
+}: {
+  value: string
+  checked: boolean
+  onChange: (value: string) => void
+  label: string
+  hint: string
+}) {
+  return (
+    <label
+      className={`flex items-start gap-3 rounded-md px-4 py-3 ring-1 ring-inset ${
+        checked
+          ? 'bg-slate-50 ring-slate-300'
+          : 'bg-white ring-slate-200 hover:bg-slate-50'
+      }`}
+    >
+      <input
+        type="radio"
+        name="periodSplit"
+        value={value}
+        checked={checked}
+        onChange={() => onChange(value)}
+        className="mt-0.5 h-4 w-4 border-slate-300"
+      />
+      <span className="text-sm">
+        <span className="font-medium text-slate-800">{label}</span>
+        <span className="mt-0.5 block text-xs text-slate-500">{hint}</span>
+      </span>
+    </label>
+  )
+}
+
 /**
  * Generates draft invoices for a period.
  *
@@ -103,6 +141,7 @@ export function GenerateForm({
   )
   const [periodEnd, setPeriodEnd] = useState(values.periodEnd ?? defaultEnd)
   const [touchedDates, setTouchedDates] = useState(false)
+  const [periodSplit, setPeriodSplit] = useState(values.periodSplit ?? 'NONE')
 
   const forCustomer = contracts.filter(
     (contract) => contract.customerId === customerId,
@@ -120,6 +159,12 @@ export function GenerateForm({
   const selEnd = periodEnd ? new Date(`${periodEnd}T00:00:00.000Z`) : null
   if (selStart) anchors.push(selStart)
   if (selEnd) anchors.push(selEnd)
+
+  const spansMonths =
+    !!selStart &&
+    !!selEnd &&
+    (selStart.getUTCFullYear() !== selEnd.getUTCFullYear() ||
+      selStart.getUTCMonth() !== selEnd.getUTCMonth())
 
   const earliest =
     anchors.length > 0
@@ -488,23 +533,37 @@ earlier days are already invoiced or before the machine arrived,
           </>
         )}
 
-        <label className="flex items-start gap-3 rounded-md bg-slate-50 px-4 py-3 ring-1 ring-inset ring-slate-200">
-          <input
-            type="checkbox"
-            name="splitMonthly"
-            className="mt-0.5 h-4 w-4 rounded border-slate-300"
-          />
-          <span className="text-sm">
-            <span className="font-medium text-slate-800">
-              One invoice per calendar month
-            </span>
-            <span className="mt-0.5 block text-xs text-slate-500">
-              A hire from 1 Aug to 15 Oct becomes an August, a September and a
-              part-October invoice. Leave unticked for a single invoice covering
-              the whole span.
-            </span>
-          </span>
-        </label>
+        {/* Only worth asking when the span actually crosses a month boundary.
+            Hidden, nothing is submitted and the whole span bills as one. */}
+        {spansMonths && (
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium text-slate-800">
+              This period covers more than one month
+            </legend>
+
+            <SplitChoice
+              value="NONE"
+              checked={periodSplit === 'NONE'}
+              onChange={setPeriodSplit}
+              label="Bill it as one stretch"
+              hint="A single line per machine covering the whole period."
+            />
+            <SplitChoice
+              value="MONTHLY_LINES"
+              checked={periodSplit === 'MONTHLY_LINES'}
+              onChange={setPeriodSplit}
+              label="One invoice, a line per month"
+              hint="16–30 Jun and 1–11 Jul become two lines on the same invoice, each with its own dates and hours."
+            />
+            <SplitChoice
+              value="SEPARATE_INVOICES"
+              checked={periodSplit === 'SEPARATE_INVOICES'}
+              onChange={setPeriodSplit}
+              label="A separate invoice per month"
+              hint="1 Aug to 15 Oct becomes an August, a September and a part-October invoice. Mobilization goes on the first and de-mobilization on the last."
+            />
+          </fieldset>
+        )}
       </section>
 
 
