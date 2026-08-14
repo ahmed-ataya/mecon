@@ -586,10 +586,18 @@ model InvoiceLineItem {
   periodStart DateTime?
   periodEnd   DateTime?
 
-  /// Hours actually worked, from the timesheet. Nothing can derive this: the
-  /// calendar says 23 days but the invoice says 162.5 hours, because the
-  /// machine did not work every hour of every day.
+  /// Hours billed on this line. The calendar says 23 days but the invoice says
+  /// 162.5 hours, because the machine did not work every hour of every day.
   hours Float?
+
+  /// ESTIMATE | TIMESHEET — where `hours` came from. See src/lib/hours.ts.
+  ///
+  /// Stored rather than inferred because it is a claim about evidence, and it
+  /// has to survive on the record: an invoice raised from a calendar estimate
+  /// and one raised from a signed timesheet are not the same document, and
+  /// months later nothing else could tell them apart. Null on lump-sum lines,
+  /// which have no hours at all.
+  hoursSource String?
 
   /// Traceability back to the assignment history this line was derived from
   equipmentAssignmentId String?

@@ -12,6 +12,9 @@ import {
   buttonPrimaryClass,
   buttonSecondaryClass,
 } from '@/components/ui/form'
+import { RATE_TYPE_LABELS, RATE_TYPE_PERIOD_LABELS } from '@/lib/enums'
+import { hoursFor } from '@/lib/hours'
+import { auditRateTier, type RateTierAudit } from '@/lib/rate-audit'
 import type { ActionState } from '@/lib/actions/invoices'
 import type { PartyOption } from '@/lib/contract-options'
 
@@ -33,6 +36,14 @@ export type ContractChoice = {
   invoicedThrough: Date | null
   hasDraft: boolean
   offHire: { startDate: Date; endDate: Date | null }[]
+  /** Per machine, for the rate audit — see auditSelection below. */
+  assignments: {
+    equipmentName: string
+    startDate: Date
+    endDate: Date | null
+    rateType: string
+    offHire: { startDate: Date; endDate: Date | null }[]
+  }[]
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
@@ -65,6 +76,55 @@ function nextUninvoicedFrom(contract: ContractChoice): Date | null {
   if (contract.workedTo && from > contract.workedTo) return null
 
   return from
+}
+
+/**
+ * Runs the rate audit over what is currently selected, BEFORE anything is
+ * generated — which is the point of it. Once a draft exists the decision has
+ * already been made.
+ *
+ * It calls the same two modules the generator does: hours come from hoursFor,
+ * the judgement from auditRateTier. Nothing is recomputed here, so the warning
+ * shown before generating and the one attached afterwards cannot disagree.
+ */
+function auditSelection(
+  contracts: ContractChoice[],
+  start: Date | null,
+  end: Date | null,
+): RateTierAudit[] {
+  if (!start || !end || start > end) return []
+
+  const audits: RateTierAudit[] = []
+
+  for (const contract of contracts) {
+    // Clamped to the contract exactly as buildProposal clamps it, so a
+    // contract that closed mid-period is judged on the days it really ran.
+    const from = contract.mobilizationDate > start ? contract.mobilizationDate : start
+    const to =
+      contract.closingDate && contract.closingDate < end ? contract.closingDate : end
+    if (from > to) continue
+
+    for (const assignment of contract.assignments) {
+      const worked = hoursFor({
+        assignmentStart: assignment.startDate,
+        assignmentEnd: assignment.endDate,
+        offHirePeriods: assignment.offHire,
+        period: { start: from, end: to },
+      })
+      if (!worked || worked.billableDays === 0) continue
+
+      const audit = auditRateTier({
+        equipmentName: assignment.equipmentName,
+        rateType: assignment.rateType,
+        billableDays: worked.billableDays,
+        hours: worked.hours,
+        hoursSource: worked.source,
+      })
+      if (audit) audits.push(audit)
+    }
+  }
+
+  return audits
 }
 
 /** One option in the how-to-split-the-period choice. */
@@ -183,6 +243,7 @@ export function GenerateForm({
   )
 
   const chosen = forCustomer.filter((contract) => selected.includes(contract.id))
+  const audits = auditSelection(chosen, selStart, selEnd)
   const lpoIds = [...new Set(chosen.map((contract) => contract.lpoId))]
   const mixedLpos = combine && lpoIds.length > 1
 
@@ -600,6 +661,46 @@ earlier days are already invoiced or before the machine arrived,
           rather than silently doing nothing.
         </p>
       </section>
+
+      {audits.length > 0 && (
+        <section className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-6">
+          <div>
+            <h2 className="font-semibold text-amber-900">
+              Check the rate before generating
+            </h2>
+            <p className="mt-1 text-sm text-amber-800">
+              {audits.length === 1 ? 'A machine is' : `${audits.length} machines are`}{' '}
+              quoted on a longer period than {audits.length === 1 ? 'it was' : 'they were'}{' '}
+              actually on hire for. Nothing is blocked — generate anyway if the
+              quotation says so.
+            </p>
+          </div>
+
+          <ul className="space-y-2">
+            {audits.map((audit, index) => (
+              <li
+                key={`${audit.equipmentName}-${index}`}
+                className="rounded-md bg-white px-4 py-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-200"
+              >
+                <span className="font-medium">{audit.equipmentName}</span>
+                <span className="mt-1 block text-xs">
+                  Quoted {RATE_TYPE_LABELS[audit.rateType].toLowerCase()} (a full{' '}
+                  {RATE_TYPE_PERIOD_LABELS[audit.rateType]} is {audit.quotedDays}{' '}
+                  working days) · on hire {audit.billableDays} working day
+                  {audit.billableDays === 1 ? '' : 's'} · billing {audit.hours} hours
+                  {audit.hoursSource === 'ESTIMATE' && ' (estimated)'}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <p className="text-xs text-amber-800">
+            No figure is shown for the difference: a contract carries one agreed
+            rate, so the shorter tier&rsquo;s rate is not something this system
+            knows. Compare against the quotation.
+          </p>
+        </section>
+      )}
 
       <div className="flex gap-3">
         <button type="submit" disabled={pending} className={buttonPrimaryClass}>

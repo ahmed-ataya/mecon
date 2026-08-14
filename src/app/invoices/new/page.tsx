@@ -94,6 +94,19 @@ export default async function NewInvoicePage() {
       workedTo,
       invoicedThrough,
       hasDraft,
+      // Every assignment, not just the current one: the rate audit runs per
+      // machine, and a period covering a swap has to judge each machine's own
+      // quoted period against its own days.
+      assignments: contract.equipmentAssignments.map((assignment) => ({
+        equipmentName: assignment.equipment.name,
+        startDate: assignment.startDate,
+        endDate: assignment.endDate,
+        rateType: assignment.rateType,
+        offHire: assignment.offHirePeriods.map((period) => ({
+          startDate: period.startDate,
+          endDate: period.endDate,
+        })),
+      })),
       // Drawn in red on the bar — never billable, so it must be visible next
       // to the days that are.
       offHire: contract.equipmentAssignments.flatMap((assignment) =>

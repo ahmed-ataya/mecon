@@ -1,13 +1,9 @@
-import { formatDate, workingDayCount } from './dates'
-import {
-  HOURS_PER_WORKING_DAY,
-  RATE_TYPE_DAYS,
-  RATE_TYPE_LABELS,
-  type RateType,
-  type Uom,
-} from './enums'
+import { formatDate } from './dates'
+import { type Uom } from './enums'
+import { hoursFor, overlapSpan, type HoursSource } from './hours'
 import { effectiveCharge } from './mobilization'
 import { formatQar } from './money'
+import { auditRateTier, rateTierWarning } from './rate-audit'
 import type { Warning } from './warnings'
 
 /**
@@ -19,9 +15,10 @@ import type { Warning } from './warnings'
  * it is a term of the agreement, not a divisor. Pro rata therefore needs no
  * special case: a part period is simply fewer hours at the same rate.
  *
- * DAYS ARE WORKING DAYS, Saturday to Thursday. Those same rates are built on a
- * six-day week and a 26-day month, so counting Fridays here would put the day
- * count and the rate out of step with each other.
+ * HOURS COME FROM ONE PLACE, src/lib/hours.ts, and never from arithmetic done
+ * here. They are an estimate today and will come from timesheets shortly; this
+ * file must not care which, and carries the source through to the line so the
+ * difference is visible rather than assumed.
  *
  * ONE LINE PER MACHINE, covering machine and operator together, because the
  * customer is quoted a single rate for both: "Hire of Roller (3 Ton) with
@@ -75,6 +72,8 @@ export type ProposedLine = {
   periodStart?: Date
   periodEnd?: Date
   hours?: number
+  /** Whether those hours were measured or inferred — see src/lib/hours.ts. */
+  hoursSource?: HoursSource
   /** Days on hire in this span — the starting point for entering real hours. */
   billableDays?: number
 }
@@ -83,40 +82,6 @@ export type BillingProposal = {
   lines: ProposedLine[]
   total: number
   warnings: Warning[]
-}
-
-/**
- * Days the two ranges share, inclusive at both ends. Null if they miss.
- *
- * `days` counts WORKING days — Saturday to Thursday — because that is what
- * every rate is built on. Fridays are not billable days, so a hire spanning
- * one is not a day longer for it.
- */
-function overlapDays(
-  aStart: Date,
-  aEnd: Date | null,
-  bStart: Date,
-  bEnd: Date,
-): { days: number; from: Date; to: Date } | null {
-  const from = aStart.getTime() > bStart.getTime() ? aStart : bStart
-  const aFinish = aEnd ?? bEnd
-  const to = aFinish.getTime() < bEnd.getTime() ? aFinish : bEnd
-
-  if (from.getTime() > to.getTime()) return null
-
-  return { days: workingDayCount(from, to), from, to }
-}
-
-/** Also working days, so the deduction is in the same unit as the hire. */
-function offHireDaysWithin(offHires: OffHire[], from: Date, to: Date): number {
-  let days = 0
-
-  for (const offHire of offHires) {
-    const overlap = overlapDays(offHire.startDate, offHire.endDate, from, to)
-    if (overlap) days += overlap.days
-  }
-
-  return days
 }
 
 /** DD-MM-YYYY, the format used inside the line descriptions. */
@@ -150,43 +115,6 @@ export function describeHire(
       : ' with Operator'
 
   return `Hire of ${equipment.type}${capacity}${operator}`
-}
-
-/**
- * Fires when a hire arranged over a period ran for LESS than that period.
- *
- * The rate itself is hourly, so a short month bills fewer hours and the
- * arithmetic is never wrong. What is worth questioning is the agreement: a
- * monthly rate is normally quoted against a month's use, and four days on a
- * monthly arrangement is either a discount nobody meant to give or a minimum
- * charge nobody has recorded.
- *
- * One-directional on purpose. A daily arrangement running for months is never
- * flagged — the customer simply pays for every hour, which costs nothing.
- */
-function rateTierWarning(
-  equipmentName: string,
-  rateType: RateType,
-  billableDays: number,
-): Warning | null {
-  const perUnit = RATE_TYPE_DAYS[rateType]
-
-  // An arrangement this code does not recognise cannot be judged against the
-  // hire — and must not take invoice generation down with it. rateType is a
-  // string column, so a value retired by a later change can still be read back
-  // out of an old row.
-  if (perUnit === undefined || billableDays >= perUnit) return null
-
-  const arrangement = (RATE_TYPE_LABELS[rateType] ?? rateType).toLowerCase()
-
-  return {
-    code: 'RATE_TIER_MISMATCH',
-    severity: 'AMBER',
-    message:
-      `${equipmentName} is on a ${arrangement} hire ` +
-      `but was on site only ${billableDays} working day${billableDays === 1 ? '' : 's'} ` +
-      `in this period. Check what was agreed for a part period.`,
-  }
 }
 
 /**
@@ -247,77 +175,72 @@ export function buildProposal({
   const period: Period = { start, end }
 
   for (const assignment of equipmentAssignments) {
-    const overlap = overlapDays(
-      assignment.startDate,
-      assignment.endDate,
-      period.start,
-      period.end,
-    )
-    if (!overlap) continue
-
-    const offHire = offHireDaysWithin(
-      assignment.offHirePeriods,
-      overlap.from,
-      overlap.to,
-    )
-    const billableDays = Math.max(0, overlap.days - offHire)
+    const worked = hoursFor({
+      assignmentStart: assignment.startDate,
+      assignmentEnd: assignment.endDate,
+      offHirePeriods: assignment.offHirePeriods,
+      period,
+    })
+    if (!worked) continue
 
     // Which operator arrangement was running over this span decides whether
     // the line reads "with Operator" or "Without Operator".
     const arrangement =
       operatorAssignments.find((operator) =>
-        overlapDays(operator.startDate, operator.endDate, overlap.from, overlap.to),
+        overlapSpan(operator.startDate, operator.endDate, worked.from, worked.to),
       )?.arrangement ?? null
 
-    const rateType = assignment.rateType as RateType
     // Straight through: the stored rate is the hourly rate the customer agreed.
     const rate = assignment.rateAmount
-
-    // A STARTING POINT only. Real hours come from the timesheet and are
-    // entered on the draft — the calendar cannot know them, which is why a
-    // 23-day hire invoiced as 162.5 hours rather than 230.
-    //
-    // It is at least the right order of magnitude now: a full July is 26
-    // working days, so 260 hours against the 255 actually invoiced. Counting
-    // Fridays would have suggested 310.
-    const suggestedHours = billableDays * HOURS_PER_WORKING_DAY
 
     lines.push({
       kind: 'EQUIPMENT',
       description: describeHire(assignment.equipment, arrangement),
       uom: 'Hours',
-      quantity: suggestedHours,
+      quantity: worked.hours,
       unitRate: rate,
-      amount: Math.round(suggestedHours * rate),
+      amount: Math.round(worked.hours * rate),
       equipmentAssignmentId: assignment.id,
-      periodStart: overlap.from,
-      periodEnd: overlap.to,
-      hours: suggestedHours,
-      billableDays,
+      periodStart: worked.from,
+      periodEnd: worked.to,
+      hours: worked.hours,
+      hoursSource: worked.source,
+      billableDays: worked.billableDays,
     })
 
-    if (offHire > 0) {
+    if (worked.offHireDays > 0) {
       warnings.push({
         code: 'OFF_HIRE_DEDUCTED',
         severity: 'AMBER',
-        message: `${assignment.equipment.name}: ${offHire} off-hire working day${
-          offHire === 1 ? '' : 's'
-        } excluded from the suggested hours.`,
+        message: `${assignment.equipment.name}: ${worked.offHireDays} off-hire working day${
+          worked.offHireDays === 1 ? '' : 's'
+        } excluded from the hours.`,
       })
     }
 
-    if (billableDays > 0) {
-      const tier = rateTierWarning(assignment.equipment.name, rateType, billableDays)
-      if (tier) warnings.push(tier)
+    if (worked.billableDays > 0) {
+      const audit = auditRateTier({
+        equipmentName: assignment.equipment.name,
+        rateType: assignment.rateType,
+        billableDays: worked.billableDays,
+        hours: worked.hours,
+        hoursSource: worked.source,
+      })
+      if (audit) warnings.push(rateTierWarning(audit))
     }
   }
 
-  if (lines.length > 0) {
+  // Only when something is actually estimated. Once timesheets feed the hours
+  // this stops firing on its own rather than needing to be remembered.
+  const estimated = lines.filter((line) => line.hoursSource === 'ESTIMATE')
+
+  if (estimated.length > 0) {
     warnings.push({
       code: 'HOURS_ARE_ESTIMATED',
       severity: 'AMBER',
       message:
-        'Hours are a starting estimate — working days on hire (Sat–Thu) × 10. Replace them with the timesheet figures before issuing.',
+        `Hours on ${estimated.length} line${estimated.length === 1 ? '' : 's'} are estimated — ` +
+        'working days on hire (Sat–Thu) × 10, not measured. A machine rarely works every hour of every day, so this normally overstates. Check against the timesheet before issuing.',
     })
   }
 

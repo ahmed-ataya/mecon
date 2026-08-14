@@ -67,6 +67,7 @@ function toLineData(line: ProposedLine) {
     periodStart: line.periodStart,
     periodEnd: line.periodEnd,
     hours: line.hours,
+    hoursSource: line.hoursSource,
   }
 }
 

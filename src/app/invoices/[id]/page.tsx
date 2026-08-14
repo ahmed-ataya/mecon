@@ -64,6 +64,21 @@ export default async function InvoiceDetailPage({
     : null
   if (consumption?.warning) warnings.push(consumption.warning)
 
+  // Recomputed from the stored lines rather than carried over from generation,
+  // so it clears itself the moment the hours are replaced with real ones.
+  const estimatedLines = invoice.lineItems.filter(
+    (line) => line.uom === 'Hours' && line.hoursSource !== 'TIMESHEET',
+  )
+  if (estimatedLines.length > 0) {
+    warnings.push({
+      code: 'HOURS_ARE_ESTIMATED',
+      severity: 'AMBER',
+      message:
+        `Hours on ${estimatedLines.length} line${estimatedLines.length === 1 ? '' : 's'} are estimated, ` +
+        'not measured — working days on hire × 10. A machine rarely works every hour of every day, so this normally overstates. Check against the timesheet before issuing.',
+    })
+  }
+
   if (invoice.contracts.length > 1) {
     warnings.push({
       code: 'COMBINED_INVOICE',
@@ -148,6 +163,16 @@ export default async function InvoiceDetailPage({
                   <td className="py-2 pr-3 text-slate-600">{line.uom}</td>
                   <td className="py-2 pr-3 text-right text-slate-600">
                     {line.quantity}
+                    {/* An estimated figure must never read as a measured one.
+                        Null counts as unverified: it predates the distinction. */}
+                    {line.uom === 'Hours' && line.hoursSource !== 'TIMESHEET' && (
+                      <span
+                        className="ml-1.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-inset ring-amber-200"
+                        title="Working days on hire × 10, not measured hours"
+                      >
+                        est.
+                      </span>
+                    )}
                   </td>
                   <td className="py-2 pr-3 text-right text-slate-600">
                     {formatAmountExact(line.unitRate)}
