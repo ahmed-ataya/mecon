@@ -5,8 +5,6 @@ import { useActionState, useEffect, useRef, useState } from 'react'
 import {
   ARRANGEMENTS,
   ARRANGEMENT_LABELS,
-  RATE_TYPES,
-  RATE_TYPE_LABELS,
   SITES,
   SITE_LABELS,
   type Arrangement,
@@ -30,6 +28,7 @@ import {
 import type { ActionState } from '@/lib/actions/contracts'
 import { timeAgo, useFormDraft } from '@/lib/use-form-draft'
 import { MobilizationFields } from './MobilizationFields'
+import { RateFields } from './RateFields'
 import { WarningList } from './WarningList'
 
 /**
@@ -337,39 +336,11 @@ export function ContractForm({
           )}
         </Field>
 
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Rate type" htmlFor="rateType">
-            <select
-              id="rateType"
-              name="rateType"
-              defaultValue={values.rateType ?? RATE_TYPES[0]}
-              className={inputClass}
-            >
-              {RATE_TYPES.map((value) => (
-                <option key={value} value={value}>
-                  {RATE_TYPE_LABELS[value]}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field
-            label="Rate (QAR)"
-            htmlFor="rateAmount"
-            hint="Decimals are fine — 137.50 is stored exactly."
-          >
-            <input
-              id="rateAmount"
-              name="rateAmount"
-              inputMode="decimal"
-              defaultValue={values.rateAmount ?? ''}
-              className={inputClass}
-            />
-            {errors.rateAmount && (
-              <p className="mt-1 text-xs text-red-600">{errors.rateAmount}</p>
-            )}
-          </Field>
-        </div>
+        <RateFields
+          defaultRateType={values.rateType}
+          defaultRateAmount={values.rateAmount}
+          error={errors.rateAmount}
+        />
       </section>
 
       <section className="space-y-5 rounded-lg border border-slate-200 bg-white p-6">

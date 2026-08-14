@@ -185,20 +185,31 @@ export const SITE_REQUIRED_APPROVAL: Record<Site, ApprovalBody | null> = {
 // --- Contracts ------------------------------------------------------------
 
 /**
- * Equipment rates only. There is no hourly rate for machines — that is an
- * operator concept, and operators are priced per hour separately.
+ * The unit the rate was AGREED in. Every one of them is converted to an hourly
+ * rate for billing, so this only records how the customer was quoted.
+ *
+ * PER_HOUR exists because the quoted figure genuinely is hourly sometimes, and
+ * because the hourly rate is what appears on the printed invoice — so it is the
+ * number people have in front of them. Without it, an hourly figure gets typed
+ * into a weekly field and 28.85 an hour silently becomes 48 halalas an hour.
  *
  * Order matters: longest first. The billing warning compares the rate's unit
  * against days actually worked, and "is this rate longer than the hire" is a
  * position check in this list.
  */
-export const RATE_TYPES = ['PER_MONTH', 'PER_WEEK', 'PER_DAY'] as const
+export const RATE_TYPES = [
+  'PER_MONTH',
+  'PER_WEEK',
+  'PER_DAY',
+  'PER_HOUR',
+] as const
 export type RateType = (typeof RATE_TYPES)[number]
 
 export const RATE_TYPE_LABELS: Record<RateType, string> = {
   PER_MONTH: 'Per month',
   PER_WEEK: 'Per week',
   PER_DAY: 'Per day',
+  PER_HOUR: 'Per hour',
 }
 
 /**
@@ -217,6 +228,8 @@ export const RATE_TYPE_HOURS: Record<RateType, number> = {
   PER_MONTH: 260,
   PER_WEEK: 60,
   PER_DAY: 10,
+  // Already hourly, so the conversion is the identity.
+  PER_HOUR: 1,
 }
 
 /** Nominal days each rate covers — used to spot a rate longer than the hire. */
@@ -224,6 +237,9 @@ export const RATE_TYPE_DAYS: Record<RateType, number> = {
   PER_MONTH: 26,
   PER_WEEK: 6,
   PER_DAY: 1,
+  // Zero, not a fraction: an hourly rate can never be longer than the hire, so
+  // the "would a shorter rate bill higher" warning must never fire for it.
+  PER_HOUR: 0,
 }
 
 // --- Off hire -------------------------------------------------------------

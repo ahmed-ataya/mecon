@@ -9,7 +9,6 @@ import { formatDate, toDateInputValue } from '@/lib/dates'
 import {
   ASSIGNMENT_REASON_LABELS,
   EQUIPMENT_ASSIGNMENT_REASONS,
-  RATE_TYPES,
   RATE_TYPE_LABELS,
   type RateType,
 } from '@/lib/enums'
@@ -24,6 +23,7 @@ import {
   buttonSecondaryClass,
   inputClass,
 } from '@/components/ui/form'
+import { RateFields } from './RateFields'
 
 export type EquipmentAssignmentRow = {
   id: string
@@ -265,35 +265,11 @@ function AssignmentForm({
         </Field>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Rate type" htmlFor="rateType">
-          <select
-            id="rateType"
-            name="rateType"
-            defaultValue={defaultRateType ?? RATE_TYPES[0]}
-            className={inputClass}
-          >
-            {RATE_TYPES.map((value) => (
-              <option key={value} value={value}>
-                {RATE_TYPE_LABELS[value]}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="Rate (QAR)" htmlFor="rateAmount">
-          <input
-            id="rateAmount"
-            name="rateAmount"
-            inputMode="decimal"
-            defaultValue={toRiyalInput(defaultRateAmount)}
-            className={inputClass}
-          />
-          {errors.rateAmount && (
-            <p className="mt-1 text-xs text-red-600">{errors.rateAmount}</p>
-          )}
-        </Field>
-      </div>
+      <RateFields
+        defaultRateType={defaultRateType}
+        defaultRateAmount={toRiyalInput(defaultRateAmount)}
+        error={errors.rateAmount}
+      />
 
       <Field label="Note" htmlFor="note">
         <input id="note" name="note" className={inputClass} />
