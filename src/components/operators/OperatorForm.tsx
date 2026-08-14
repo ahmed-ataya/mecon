@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useActionState } from 'react'
 import type { Operator } from '@prisma/client'
 import { OPERATOR_SOURCES, OPERATOR_SOURCE_LABELS } from '@/lib/enums'
+import { Select } from '@/components/ui/Select'
 import {
   Field,
   FormError,
@@ -62,18 +63,14 @@ export function OperatorForm({
           htmlFor="source"
           hint="Market operators are subcontracted and re-billed to the customer."
         >
-          <select
-            id="source"
+          <Select
             name="source"
+            options={OPERATOR_SOURCES.map((source) => ({
+              value: source,
+              label: OPERATOR_SOURCE_LABELS[source],
+            }))}
             defaultValue={initial.source}
-            className={inputClass}
-          >
-            {OPERATOR_SOURCES.map((source) => (
-              <option key={source} value={source}>
-                {OPERATOR_SOURCE_LABELS[source]}
-              </option>
-            ))}
-          </select>
+          />
           {errors.source && (
             <p className="mt-1 text-xs text-red-600">{errors.source}</p>
           )}

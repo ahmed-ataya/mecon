@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
 import { parseDateInput } from '@/lib/dates'
 import {
   chargeByRule,
@@ -8,6 +7,7 @@ import {
   MOBILIZATION_CHARGES,
 } from '@/lib/mobilization'
 import { Combobox } from '@/components/ui/Combobox'
+import { Select } from '@/components/ui/Select'
 import { Field, inputClass } from '@/components/ui/form'
 
 /**
@@ -40,11 +40,6 @@ export function MobilizationFields({
   }
   errors: Record<string, string>
 }) {
-  const chargeRef = useRef<HTMLSelectElement>(null)
-  useEffect(() => {
-    if (chargeRef.current) chargeRef.current.value = charge
-  })
-
   const start = parseDateInput(mobilizationDate)
   const end = parseDateInput(closingDate)
 
@@ -96,24 +91,23 @@ export function MobilizationFields({
 
       <div className="grid gap-5 sm:grid-cols-2">
         <Field label="Charge" htmlFor="mobilizationCharge">
-          <select
-            id="mobilizationCharge"
+          <Select
             name="mobilizationCharge"
-            ref={chargeRef}
+            options={[
+              {
+                value: '',
+                label:
+                  'Follow the duration rule' +
+                  (ruleSays ? ` (${MOBILIZATION_CHARGE_LABELS[ruleSays]})` : ''),
+              },
+              ...MOBILIZATION_CHARGES.map((value) => ({
+                value,
+                label: `${MOBILIZATION_CHARGE_LABELS[value]} — override`,
+              })),
+            ]}
             defaultValue={charge}
-            onChange={(event) => onChargeChange(event.target.value)}
-            className={inputClass}
-          >
-            <option value="">
-              Follow the duration rule
-              {ruleSays ? ` (${MOBILIZATION_CHARGE_LABELS[ruleSays]})` : ''}
-            </option>
-            {MOBILIZATION_CHARGES.map((value) => (
-              <option key={value} value={value}>
-                {MOBILIZATION_CHARGE_LABELS[value]} — override
-              </option>
-            ))}
-          </select>
+            onSelect={onChargeChange}
+          />
           {errors.mobilizationCharge && (
             <p className="mt-1 text-xs text-red-600">
               {errors.mobilizationCharge}

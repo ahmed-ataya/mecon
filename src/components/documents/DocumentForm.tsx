@@ -9,6 +9,7 @@ import {
   THIRD_PARTY_TYPES,
   type OwnerType,
 } from '@/lib/enums'
+import { Select } from '@/components/ui/Select'
 import {
   Field,
   FormError,
@@ -71,17 +72,13 @@ export function DocumentForm({
   // React resets the <form> after every action, including a failed one. Text
   // inputs survive that because React writes their defaultValue as a real DOM
   // attribute and a reset restores from attributes — so re-rendering them from
-  // the echoed values is enough. A <select> does NOT: React applies its value
-  // as a property and never sets `selected` on the option, so a reset always
-  // snaps it back to the first entry. Left alone that is a silent data bug —
-  // after a validation error the type would read back as the first document
-  // type while the 3rd party fields were still on screen, saving the wrong
-  // type with the certificate details stripped. Re-applying after every commit
-  // puts the element back in step with the state that is actually submitted.
-  const typeSelectRef = useRef<HTMLSelectElement>(null)
+  // the echoed values is enough. A checkbox does NOT: React applies `checked`
+  // as a property and a reset restores from the `defaultChecked` attribute
+  // instead, so re-applying it after every commit keeps it in step with the
+  // state that is actually submitted. Document type used to need the same
+  // treatment; it is a Select now, which handles this itself.
   const applicableRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
-    if (typeSelectRef.current) typeSelectRef.current.value = documentType
     if (applicableRef.current) applicableRef.current.checked = isApplicable
   })
 
@@ -99,20 +96,15 @@ export function DocumentForm({
 
       <div className="grid gap-5 sm:grid-cols-2">
         <Field label="Document type" htmlFor="documentType">
-          <select
-            id="documentType"
+          <Select
             name="documentType"
-            ref={typeSelectRef}
+            options={DOCUMENT_TYPES_BY_OWNER[ownerType].map((type) => ({
+              value: type,
+              label: type,
+            }))}
             defaultValue={initial.documentType}
-            onChange={(event) => setDocumentType(event.target.value)}
-            className={inputClass}
-          >
-            {DOCUMENT_TYPES_BY_OWNER[ownerType].map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
+            onSelect={setDocumentType}
+          />
           {errors.documentType && (
             <p className="mt-1 text-xs text-red-600">{errors.documentType}</p>
           )}
@@ -187,19 +179,15 @@ export function DocumentForm({
 
           <div className="grid gap-5 sm:grid-cols-2">
             <Field label="3rd party type" htmlFor="thirdPartyType">
-              <select
-                id="thirdPartyType"
+              <Select
                 name="thirdPartyType"
+                options={THIRD_PARTY_TYPES.map((type) => ({
+                  value: type,
+                  label: type,
+                }))}
                 defaultValue={initial.thirdPartyType}
-                className={inputClass}
-              >
-                <option value="">Select…</option>
-                {THIRD_PARTY_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
+                placeholder="Select…"
+              />
               {errors.thirdPartyType && (
                 <p className="mt-1 text-xs text-red-600">
                   {errors.thirdPartyType}

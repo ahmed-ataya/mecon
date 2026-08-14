@@ -9,6 +9,7 @@ import {
   type RateType,
 } from '@/lib/enums'
 import { formatAmountExact, parseQar, periodTotal } from '@/lib/money'
+import { Select } from '@/components/ui/Select'
 import { Field, inputClass } from '@/components/ui/form'
 
 /**
@@ -41,14 +42,12 @@ export function RateFields({
   const [rateType, setRateType] = useState<RateType>(initialType)
   const [amount, setAmount] = useState(defaultRateAmount ?? '')
 
-  // React's post-action form reset drops both values: it applies them as
-  // properties, never as the `selected`/`value` attributes a reset reads. So
-  // they are re-applied after every commit, the same way the site regime and
-  // arrangement selects are. See NOTES.md.
-  const typeRef = useRef<HTMLSelectElement>(null)
+  // React's post-action form reset drops the rate value: it is applied as a
+  // property, never as the `value` attribute a reset reads. Re-applied after
+  // every commit. See NOTES.md. The arrangement picker (Select) handles its
+  // own equivalent of this internally.
   const amountRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
-    if (typeRef.current) typeRef.current.value = rateType
     if (amountRef.current) amountRef.current.value = amount
   })
 
@@ -61,20 +60,15 @@ export function RateFields({
     <>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Hire arrangement" htmlFor="rateType">
-          <select
-            id="rateType"
+          <Select
             name="rateType"
-            ref={typeRef}
+            options={RATE_TYPES.map((value) => ({
+              value,
+              label: RATE_TYPE_LABELS[value],
+            }))}
             defaultValue={initialType}
-            onChange={(event) => setRateType(event.target.value as RateType)}
-            className={inputClass}
-          >
-            {RATE_TYPES.map((value) => (
-              <option key={value} value={value}>
-                {RATE_TYPE_LABELS[value]}
-              </option>
-            ))}
-          </select>
+            onSelect={(value) => setRateType(value as RateType)}
+          />
         </Field>
 
         <Field

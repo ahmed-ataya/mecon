@@ -17,6 +17,7 @@ import { formatQar, toRiyalInput } from '@/lib/money'
 import type { PartyOption } from '@/lib/contract-options'
 import { replaceOperator } from '@/lib/actions/contracts'
 import { Combobox } from '@/components/ui/Combobox'
+import { Select } from '@/components/ui/Select'
 import {
   Field,
   FormError,
@@ -205,14 +206,6 @@ function OperatorAssignmentForm({
   )
   const [reason, setReason] = useState(defaultReason)
 
-  // Selects lose their value to React's post-action form reset — see NOTES.md.
-  const arrangementRef = useRef<HTMLSelectElement>(null)
-  const reasonRef = useRef<HTMLSelectElement>(null)
-  useEffect(() => {
-    if (arrangementRef.current) arrangementRef.current.value = arrangement
-    if (reasonRef.current) reasonRef.current.value = reason
-  })
-
   const settled = useRef(state)
   useEffect(() => {
     if (settled.current !== state && !state.errors) onDone()
@@ -228,39 +221,27 @@ function OperatorAssignmentForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Arrangement" htmlFor="arrangement">
-          <select
-            id="arrangement"
+          <Select
             name="arrangement"
-            ref={arrangementRef}
+            options={ARRANGEMENTS.map((value) => ({
+              value,
+              label: ARRANGEMENT_LABELS[value],
+            }))}
             defaultValue={arrangement}
-            onChange={(event) =>
-              setArrangement(event.target.value as Arrangement)
-            }
-            className={inputClass}
-          >
-            {ARRANGEMENTS.map((value) => (
-              <option key={value} value={value}>
-                {ARRANGEMENT_LABELS[value]}
-              </option>
-            ))}
-          </select>
+            onSelect={(value) => setArrangement(value as Arrangement)}
+          />
         </Field>
 
         <Field label="Reason" htmlFor="reason">
-          <select
-            id="reason"
+          <Select
             name="reason"
-            ref={reasonRef}
+            options={OPERATOR_ASSIGNMENT_REASONS.map((value) => ({
+              value,
+              label: ASSIGNMENT_REASON_LABELS[value] ?? value,
+            }))}
             defaultValue={reason}
-            onChange={(event) => setReason(event.target.value)}
-            className={inputClass}
-          >
-            {OPERATOR_ASSIGNMENT_REASONS.map((value) => (
-              <option key={value} value={value}>
-                {ASSIGNMENT_REASON_LABELS[value] ?? value}
-              </option>
-            ))}
-          </select>
+            onSelect={setReason}
+          />
         </Field>
       </div>
 

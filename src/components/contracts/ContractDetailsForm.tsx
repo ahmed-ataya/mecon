@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState, useEffect, useRef, useState } from 'react'
+import { useActionState, useState } from 'react'
 import type { Contract } from '@prisma/client'
 import { SITES, SITE_LABELS } from '@/lib/enums'
 import { toDateInputValue } from '@/lib/dates'
@@ -13,6 +13,7 @@ import type {
 } from '@/lib/contract-options'
 import type { ActionState } from '@/lib/actions/contracts'
 import { Combobox } from '@/components/ui/Combobox'
+import { Select } from '@/components/ui/Select'
 import {
   Field,
   FormError,
@@ -58,12 +59,6 @@ export function ContractDetailsForm({
   const [siteRegime, setSiteRegime] = useState(
     values.siteRegime ?? contract.siteRegime,
   )
-
-  // Selects lose their value to React's post-action form reset — see NOTES.md.
-  const siteRef = useRef<HTMLSelectElement>(null)
-  useEffect(() => {
-    if (siteRef.current) siteRef.current.value = siteRegime
-  })
 
   const [mobilizationDate, setMobilizationDate] = useState(
     values.mobilizationDate ?? toDateInputValue(contract.mobilizationDate),
@@ -139,20 +134,12 @@ export function ContractDetailsForm({
             htmlFor="siteRegime"
             hint="Which regime's 3rd party certificates this location accepts."
           >
-            <select
-              id="siteRegime"
+            <Select
               name="siteRegime"
-              ref={siteRef}
+              options={SITES.map((value) => ({ value, label: SITE_LABELS[value] }))}
               defaultValue={siteRegime}
-              onChange={(event) => setSiteRegime(event.target.value)}
-              className={inputClass}
-            >
-              {SITES.map((value) => (
-                <option key={value} value={value}>
-                  {SITE_LABELS[value]}
-                </option>
-              ))}
-            </select>
+              onSelect={setSiteRegime}
+            />
           </Field>
         </div>
 

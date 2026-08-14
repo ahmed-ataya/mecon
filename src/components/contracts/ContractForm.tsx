@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState, useEffect, useRef, useState } from 'react'
+import { useActionState, useState } from 'react'
 import {
   ARRANGEMENTS,
   ARRANGEMENT_LABELS,
@@ -17,6 +17,7 @@ import type {
 } from '@/lib/contract-options'
 import type { Warning } from '@/lib/warnings'
 import { Combobox } from '@/components/ui/Combobox'
+import { Select } from '@/components/ui/Select'
 import {
   ErrorSummary,
   Field,
@@ -89,16 +90,6 @@ export function ContractForm({
   const [mobilizationCharge, setMobilizationCharge] = useState(
     values.mobilizationCharge ?? '',
   )
-
-  // Selects lose their value to React's post-action form reset — it applies the
-  // value as a property, never as the `selected` attribute a reset reads.
-  // See NOTES.md.
-  const regimeRef = useRef<HTMLSelectElement>(null)
-  const arrangementRef = useRef<HTMLSelectElement>(null)
-  useEffect(() => {
-    if (regimeRef.current) regimeRef.current.value = siteRegime
-    if (arrangementRef.current) arrangementRef.current.value = arrangement
-  })
 
   /**
    * Remounting the <form> re-creates the uncontrolled inputs from `values`,
@@ -256,20 +247,12 @@ export function ContractForm({
             htmlFor="siteRegime"
             hint="Which regime's 3rd party certificates this location accepts."
           >
-            <select
-              id="siteRegime"
+            <Select
               name="siteRegime"
-              ref={regimeRef}
+              options={SITES.map((value) => ({ value, label: SITE_LABELS[value] }))}
               defaultValue={siteRegime}
-              onChange={(event) => setSiteRegime(event.target.value)}
-              className={inputClass}
-            >
-              {SITES.map((value) => (
-                <option key={value} value={value}>
-                  {SITE_LABELS[value]}
-                </option>
-              ))}
-            </select>
+              onSelect={setSiteRegime}
+            />
           </Field>
         </div>
 
@@ -347,22 +330,15 @@ export function ContractForm({
         <h2 className="font-semibold">Operator</h2>
 
         <Field label="Arrangement" htmlFor="arrangement">
-          <select
-            id="arrangement"
+          <Select
             name="arrangement"
-            ref={arrangementRef}
+            options={ARRANGEMENTS.map((value) => ({
+              value,
+              label: ARRANGEMENT_LABELS[value],
+            }))}
             defaultValue={arrangement}
-            onChange={(event) =>
-              setArrangement(event.target.value as Arrangement)
-            }
-            className={inputClass}
-          >
-            {ARRANGEMENTS.map((value) => (
-              <option key={value} value={value}>
-                {ARRANGEMENT_LABELS[value]}
-              </option>
-            ))}
-          </select>
+            onSelect={(value) => setArrangement(value as Arrangement)}
+          />
         </Field>
 
         {needsOperator && (

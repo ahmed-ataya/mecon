@@ -15,6 +15,7 @@ import { describeRate } from '@/lib/rates'
 import type { EquipmentOption } from '@/lib/contract-options'
 import { replaceEquipment } from '@/lib/actions/contracts'
 import { Combobox } from '@/components/ui/Combobox'
+import { Select } from '@/components/ui/Select'
 import {
   Field,
   FormError,
@@ -193,12 +194,6 @@ function AssignmentForm({
   const errors = state.errors ?? {}
   const [reason, setReason] = useState(defaultReason)
 
-  // Selects lose their value to React's post-action form reset — see NOTES.md.
-  const reasonRef = useRef<HTMLSelectElement>(null)
-  useEffect(() => {
-    if (reasonRef.current) reasonRef.current.value = reason
-  })
-
   // Close once the server reports success (no errors came back).
   const settled = useRef(state)
   useEffect(() => {
@@ -244,20 +239,15 @@ function AssignmentForm({
         </Field>
 
         <Field label="Reason" htmlFor="reason">
-          <select
-            id="reason"
+          <Select
             name="reason"
-            ref={reasonRef}
+            options={EQUIPMENT_ASSIGNMENT_REASONS.map((value) => ({
+              value,
+              label: ASSIGNMENT_REASON_LABELS[value] ?? value,
+            }))}
             defaultValue={reason}
-            onChange={(event) => setReason(event.target.value)}
-            className={inputClass}
-          >
-            {EQUIPMENT_ASSIGNMENT_REASONS.map((value) => (
-              <option key={value} value={value}>
-                {ASSIGNMENT_REASON_LABELS[value] ?? value}
-              </option>
-            ))}
-          </select>
+            onSelect={setReason}
+          />
         </Field>
       </div>
 

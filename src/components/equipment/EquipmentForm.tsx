@@ -1,10 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState, useEffect, useRef } from 'react'
+import { useActionState } from 'react'
 import type { Equipment } from '@prisma/client'
 import { CAPACITY_UNITS, CAPACITY_UNIT_LABELS } from '@/lib/enums'
 import { Combobox } from '@/components/ui/Combobox'
+import { Select } from '@/components/ui/Select'
 import {
   Field,
   FormError,
@@ -31,7 +32,6 @@ export function EquipmentForm({
 }) {
   const [state, formAction, pending] = useActionState(action, {})
   const errors = state.errors ?? {}
-  const unitRef = useRef<HTMLSelectElement>(null)
 
   // After a failed submit, fall back to what was typed rather than to the
   // stored record — otherwise React's post-action form reset discards it.
@@ -54,11 +54,6 @@ export function EquipmentForm({
     plateNumber: values?.plateNumber ?? equipment?.plateNumber ?? '',
     notes: values?.notes ?? equipment?.notes ?? '',
   }
-
-  // Selects lose their value to React's post-action form reset — see NOTES.md.
-  useEffect(() => {
-    if (unitRef.current) unitRef.current.value = initial.capacityUnit
-  })
 
   return (
     <form action={formAction} className="space-y-5">
@@ -160,19 +155,14 @@ export function EquipmentForm({
           htmlFor="capacityUnit"
           hint="Metres for a telehandler, where reach is the headline figure."
         >
-          <select
-            id="capacityUnit"
+          <Select
             name="capacityUnit"
-            ref={unitRef}
+            options={CAPACITY_UNITS.map((unit) => ({
+              value: unit,
+              label: CAPACITY_UNIT_LABELS[unit],
+            }))}
             defaultValue={initial.capacityUnit}
-            className={inputClass}
-          >
-            {CAPACITY_UNITS.map((unit) => (
-              <option key={unit} value={unit}>
-                {CAPACITY_UNIT_LABELS[unit]}
-              </option>
-            ))}
-          </select>
+          />
         </Field>
       </div>
 
