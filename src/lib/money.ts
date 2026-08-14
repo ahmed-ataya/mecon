@@ -79,17 +79,17 @@ export function parseQar(
 }
 
 /**
- * The hourly rate implied by an agreed daily, weekly or monthly rate.
+ * What a full period comes to at an hourly rate — 260 hours for a month, 60
+ * for a week, 10 for a day.
  *
- * Rounded to whole halalas HERE, before it is multiplied by hours — which is
- * how the printed invoices do it. A monthly rate of 16,000 gives
- * 16000 / 260 = 61.538…, printed and charged as 61.54, and 255 hours at 61.54
- * is 15,692.70. Multiplying by the unrounded figure would give 15,692.31 and
- * fail to match the invoice.
+ * The reverse direction (dividing a monthly rate down to an hourly one) used
+ * to live here and is gone: rates are now entered as the hourly figure that
+ * appears on the invoice, so nothing has to guess at the conversion. This is
+ * the sanity-check direction, shown next to the rate as it is typed.
  */
-export function hourlyRate(
-  rateAmountHalalas: number,
-  hoursPerRateUnit: number,
+export function periodTotal(
+  hourlyRateHalalas: number,
+  hoursInPeriod: number,
 ): number {
-  return Math.round(rateAmountHalalas / hoursPerRateUnit)
+  return Math.round(hourlyRateHalalas * hoursInPeriod)
 }

@@ -13,13 +13,12 @@ import { formatDate } from '@/lib/dates'
 import {
   ARRANGEMENT_LABELS,
   ASSIGNMENT_REASON_LABELS,
-  RATE_TYPE_LABELS,
   SITE_LABELS,
   type Arrangement,
-  type RateType,
   type Site,
 } from '@/lib/enums'
 import { formatQar } from '@/lib/money'
+import { describeRate } from '@/lib/rates'
 import { describeLpo } from '@/lib/lpo'
 import {
   effectiveCharge,
@@ -147,10 +146,7 @@ export function ContractCard({ contract }: { contract: ContractCardData }) {
                     {assignment.equipment.name}
                   </span>
                   <span className="text-xs text-slate-500">
-                    {formatQar(assignment.rateAmount)}{' '}
-                    {RATE_TYPE_LABELS[
-                      assignment.rateType as RateType
-                    ]?.toLowerCase() ?? assignment.rateType}
+                    {describeRate(assignment.rateAmount, assignment.rateType)}
                   </span>
                   <span className="text-xs text-slate-400">
                     {isAssignmentUpcoming(assignment) ? 'from' : 'since'}{' '}

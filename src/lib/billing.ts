@@ -1,22 +1,23 @@
 import { formatDate, workingDayCount } from './dates'
 import {
+  HOURS_PER_WORKING_DAY,
   RATE_TYPE_DAYS,
-  RATE_TYPE_HOURS,
   RATE_TYPE_LABELS,
   type RateType,
   type Uom,
 } from './enums'
 import { effectiveCharge } from './mobilization'
-import { formatQar, hourlyRate } from './money'
+import { formatQar } from './money'
 import type { Warning } from './warnings'
 
 /**
  * Works out what a contract should be invoiced for over a period.
  *
- * EVERYTHING IS BILLED IN HOURS. The agreed daily, weekly or monthly rate is
- * converted to an hourly one — 10, 60 and 260 hours respectively — and the
- * line is hours times that rate. Pro rata therefore needs no special case: a
- * part period is simply fewer hours at the same rate.
+ * EVERYTHING IS BILLED IN HOURS, and the agreed rate is ALREADY hourly. A line
+ * is hours times that rate, with nothing converted in between. Whether the
+ * hire was arranged daily, weekly or monthly changes none of the arithmetic —
+ * it is a term of the agreement, not a divisor. Pro rata therefore needs no
+ * special case: a part period is simply fewer hours at the same rate.
  *
  * DAYS ARE WORKING DAYS, Saturday to Thursday. Those same rates are built on a
  * six-day week and a 26-day month, so counting Fridays here would put the day
@@ -152,11 +153,16 @@ export function describeHire(
 }
 
 /**
- * Fires when a machine is billed on a rate covering MORE days than it worked.
+ * Fires when a hire arranged over a period ran for LESS than that period.
  *
- * One-directional on purpose. A daily rate running for months is never
- * flagged: the customer simply pays more, which costs the business nothing.
- * Only the downward mismatch leaves money on the table.
+ * The rate itself is hourly, so a short month bills fewer hours and the
+ * arithmetic is never wrong. What is worth questioning is the agreement: a
+ * monthly rate is normally quoted against a month's use, and four days on a
+ * monthly arrangement is either a discount nobody meant to give or a minimum
+ * charge nobody has recorded.
+ *
+ * One-directional on purpose. A daily arrangement running for months is never
+ * flagged — the customer simply pays for every hour, which costs nothing.
  */
 function rateTierWarning(
   equipmentName: string,
@@ -164,15 +170,22 @@ function rateTierWarning(
   billableDays: number,
 ): Warning | null {
   const perUnit = RATE_TYPE_DAYS[rateType]
-  if (billableDays >= perUnit) return null
+
+  // An arrangement this code does not recognise cannot be judged against the
+  // hire — and must not take invoice generation down with it. rateType is a
+  // string column, so a value retired by a later change can still be read back
+  // out of an old row.
+  if (perUnit === undefined || billableDays >= perUnit) return null
+
+  const arrangement = (RATE_TYPE_LABELS[rateType] ?? rateType).toLowerCase()
 
   return {
     code: 'RATE_TIER_MISMATCH',
     severity: 'AMBER',
     message:
-      `${equipmentName} is on a ${RATE_TYPE_LABELS[rateType].toLowerCase()} rate ` +
-      `but was on hire only ${billableDays} working day${billableDays === 1 ? '' : 's'} ` +
-      `in this period. Check a shorter rate would not bill higher.`,
+      `${equipmentName} is on a ${arrangement} hire ` +
+      `but was on site only ${billableDays} working day${billableDays === 1 ? '' : 's'} ` +
+      `in this period. Check what was agreed for a part period.`,
   }
 }
 
@@ -257,7 +270,8 @@ export function buildProposal({
       )?.arrangement ?? null
 
     const rateType = assignment.rateType as RateType
-    const rate = hourlyRate(assignment.rateAmount, RATE_TYPE_HOURS[rateType])
+    // Straight through: the stored rate is the hourly rate the customer agreed.
+    const rate = assignment.rateAmount
 
     // A STARTING POINT only. Real hours come from the timesheet and are
     // entered on the draft — the calendar cannot know them, which is why a
@@ -266,7 +280,7 @@ export function buildProposal({
     // It is at least the right order of magnitude now: a full July is 26
     // working days, so 260 hours against the 255 actually invoiced. Counting
     // Fridays would have suggested 310.
-    const suggestedHours = billableDays * RATE_TYPE_HOURS.PER_DAY
+    const suggestedHours = billableDays * HOURS_PER_WORKING_DAY
 
     lines.push({
       kind: 'EQUIPMENT',

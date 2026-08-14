@@ -9,10 +9,9 @@ import { formatDate, toDateInputValue } from '@/lib/dates'
 import {
   ASSIGNMENT_REASON_LABELS,
   EQUIPMENT_ASSIGNMENT_REASONS,
-  RATE_TYPE_LABELS,
-  type RateType,
 } from '@/lib/enums'
-import { formatQar, toRiyalInput } from '@/lib/money'
+import { toRiyalInput } from '@/lib/money'
+import { describeRate } from '@/lib/rates'
 import type { EquipmentOption } from '@/lib/contract-options'
 import { replaceEquipment } from '@/lib/actions/contracts'
 import { Combobox } from '@/components/ui/Combobox'
@@ -112,10 +111,7 @@ export function EquipmentTimeline({
                       : 'ongoing'}
                     <span className="text-slate-400">
                       {' · '}
-                      {formatQar(assignment.rateAmount)}{' '}
-                      {RATE_TYPE_LABELS[
-                        assignment.rateType as RateType
-                      ]?.toLowerCase() ?? assignment.rateType}
+                      {describeRate(assignment.rateAmount, assignment.rateType)}
                     </span>
                   </p>
 

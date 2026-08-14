@@ -305,8 +305,8 @@ model Contract {
   /// Who we hired it from. Free text — suppliers come and go.
   crossHireSupplier String?
 
-  /// Integer halalas — what the supplier charges us, per the contract's
-  /// rateType. Stored so the margin against the customer rate is visible.
+  /// Integer halalas per HOUR — what the supplier charges us. Same unit as the
+  /// customer's rate so the margin is a straight subtraction.
   crossHireRate Int?
 
   // status is NOT stored — derived from mobilizationDate / closingDate so it
@@ -391,14 +391,21 @@ model EquipmentAssignment {
   deliveryNoteNumber String?
   deliveryDate       DateTime?
 
-  /// PER_DAY | PER_MONTH | PER_WORKING_HOUR.
-  /// Per assignment, not per contract: concurrent machines can be on different
-  /// rates, and a replacement machine may come in at a different rate than the
-  /// one it replaced. Phase 3 billing reads the rate from here.
+  /// PER_MONTH | PER_WEEK | PER_DAY — how the hire was ARRANGED.
+  ///
+  /// NOT the unit of rateAmount, which is always hourly. Nothing divides by
+  /// this; it records a commercial term, and flags a monthly hire that only
+  /// ran four days. Per assignment rather than per contract because a
+  /// replacement machine can come in on different terms than the one it
+  /// replaced.
   rateType String
 
-  /// Integer HALALAS (1 riyal = 100 halalas) — see src/lib/money.ts.
-  /// Rates carry decimals (137.50/hr is normal), so riyals is too coarse.
+  /// The HOURLY rate, in integer HALALAS (1 riyal = 100 halalas).
+  ///
+  /// Always hourly, whatever rateType says — invoices bill hours worked times
+  /// this, and it is the figure printed in the Rate column. Halalas because
+  /// rates carry decimals: 137.55 an hour is normal and riyals are too coarse.
+  /// See src/lib/money.ts.
   rateAmount Int
 
   /// INITIAL | BREAKDOWN_REPLACEMENT | CUSTOMER_REQUEST | SCHEDULED_SWAP | OTHER

@@ -497,7 +497,8 @@ async function main() {
             startDate: d('2026-08-02'),
             endDate: d('2026-08-07'), // closed the day before the replacement
             rateType: 'PER_DAY',
-            rateAmount: 1_250_00,
+            // 125.00/hour on a daily hire — 1,250 for a full 10-hour day
+            rateAmount: 125_00,
             reason: 'INITIAL',
             note: 'Hydraulic pump failure on 7 Aug.',
           },
@@ -505,7 +506,7 @@ async function main() {
             equipmentId: komatsuWA380.id,
             startDate: d('2026-08-08'),
             rateType: 'PER_DAY',
-            rateAmount: 1_250_00,
+            rateAmount: 125_00,
             reason: 'BREAKDOWN_REPLACEMENT',
             note: 'Replacement for Wheel Excavator #4.',
           },
@@ -541,8 +542,8 @@ async function main() {
             equipmentId: jcb3cx.id,
             startDate: d('2026-07-15'),
             rateType: 'PER_DAY',
-            // 1,375.50/day — the decimal case that forced halala storage
-            rateAmount: 1_375_50,
+            // 137.55/hour — the decimal case that forced halala storage
+            rateAmount: 137_55,
             reason: 'INITIAL',
             // On site but not billable — the red stretch on the hire bar, and
             // four days deducted from the July invoice.
@@ -596,7 +597,8 @@ async function main() {
             equipmentId: bobcatS570.id,
             startDate: d('2026-07-20'),
             rateType: 'PER_MONTH',
-            rateAmount: 8_500_00,
+            // 32.69/hour — 8,500 over a 260-hour month
+            rateAmount: 32_69,
             reason: 'INITIAL',
           },
         ],
@@ -631,7 +633,8 @@ async function main() {
             equipmentId: cat320.id,
             startDate: d('2026-10-01'),
             rateType: 'PER_MONTH',
-            rateAmount: 32_000_00,
+            // 123.08/hour — 32,000 over a 260-hour month
+            rateAmount: 123_08,
             reason: 'INITIAL',
           },
         ],

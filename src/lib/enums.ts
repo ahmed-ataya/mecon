@@ -185,61 +185,57 @@ export const SITE_REQUIRED_APPROVAL: Record<Site, ApprovalBody | null> = {
 // --- Contracts ------------------------------------------------------------
 
 /**
- * The unit the rate was AGREED in. Every one of them is converted to an hourly
- * rate for billing, so this only records how the customer was quoted.
+ * How the hire was ARRANGED — daily, weekly or monthly.
  *
- * PER_HOUR exists because the quoted figure genuinely is hourly sometimes, and
- * because the hourly rate is what appears on the printed invoice — so it is the
- * number people have in front of them. Without it, an hourly figure gets typed
- * into a weekly field and 28.85 an hour silently becomes 48 halalas an hour.
+ * This is NOT the unit of the rate. The rate is always an hourly figure (see
+ * EquipmentAssignment.rateAmount); nothing divides by the period any more. The
+ * arrangement is recorded because it is a real term of the agreement and
+ * because a monthly hire that ran four days is worth questioning.
  *
- * Order matters: longest first. The billing warning compares the rate's unit
- * against days actually worked, and "is this rate longer than the hire" is a
- * position check in this list.
+ * Order matters: longest first. The billing warning compares the arrangement
+ * against days actually worked, and "is this arrangement longer than the hire"
+ * is a position check in this list.
  */
-export const RATE_TYPES = [
-  'PER_MONTH',
-  'PER_WEEK',
-  'PER_DAY',
-  'PER_HOUR',
-] as const
+export const RATE_TYPES = ['PER_MONTH', 'PER_WEEK', 'PER_DAY'] as const
 export type RateType = (typeof RATE_TYPES)[number]
 
 export const RATE_TYPE_LABELS: Record<RateType, string> = {
-  PER_MONTH: 'Per month',
-  PER_WEEK: 'Per week',
-  PER_DAY: 'Per day',
-  PER_HOUR: 'Per hour',
+  PER_MONTH: 'Monthly',
+  PER_WEEK: 'Weekly',
+  PER_DAY: 'Daily',
+}
+
+/** The period as a bare noun, for "…for a full month". */
+export const RATE_TYPE_PERIOD_LABELS: Record<RateType, string> = {
+  PER_MONTH: 'month',
+  PER_WEEK: 'week',
+  PER_DAY: 'day',
 }
 
 /**
- * Hours each rate covers. This is the heart of the billing maths.
+ * Nominal hours in one full period of each arrangement.
  *
- * Everything is ultimately billed in HOURS: the agreed daily, weekly or
- * monthly rate is converted to an hourly rate, and the invoice is hours times
- * that rate. Pro rata needs no special case — a part period is simply fewer
- * hours at the same rate.
+ * The figures come from the working week: a day is 10 hours, and a week is
+ * Saturday to Thursday, so 6 x 10 = 60. A month is 26 working days, 26 x 10
+ * = 260.
  *
- * The figures come from the working week here: a day is 10 hours, and a week
- * is Saturday to Thursday, so 6 x 10 = 60. A month is 26 working days,
- * 26 x 10 = 260.
+ * Nothing divides the rate by these — the rate is already hourly. They are
+ * used to show what a full period comes to at the agreed rate, which is the
+ * figure someone can sanity-check a typed rate against.
  */
+export const HOURS_PER_WORKING_DAY = 10
+
 export const RATE_TYPE_HOURS: Record<RateType, number> = {
-  PER_MONTH: 260,
-  PER_WEEK: 60,
-  PER_DAY: 10,
-  // Already hourly, so the conversion is the identity.
-  PER_HOUR: 1,
+  PER_MONTH: 26 * HOURS_PER_WORKING_DAY,
+  PER_WEEK: 6 * HOURS_PER_WORKING_DAY,
+  PER_DAY: HOURS_PER_WORKING_DAY,
 }
 
-/** Nominal days each rate covers — used to spot a rate longer than the hire. */
+/** Nominal days in each arrangement — used to spot one longer than the hire. */
 export const RATE_TYPE_DAYS: Record<RateType, number> = {
   PER_MONTH: 26,
   PER_WEEK: 6,
   PER_DAY: 1,
-  // Zero, not a fraction: an hourly rate can never be longer than the hire, so
-  // the "would a shorter rate bill higher" warning must never fire for it.
-  PER_HOUR: 0,
 }
 
 // --- Off hire -------------------------------------------------------------

@@ -5,22 +5,23 @@ import {
   RATE_TYPES,
   RATE_TYPE_HOURS,
   RATE_TYPE_LABELS,
+  RATE_TYPE_PERIOD_LABELS,
   type RateType,
 } from '@/lib/enums'
-import { formatAmountExact, hourlyRate, parseQar } from '@/lib/money'
+import { formatAmountExact, parseQar, periodTotal } from '@/lib/money'
 import { Field, inputClass } from '@/components/ui/form'
 
 /**
- * The rate type and amount, with the hourly rate they come to shown underneath.
+ * The hourly rate and the arrangement it sits under, with what a full period
+ * comes to shown underneath.
  *
- * The readout is the point. Everything bills in hours, so the agreed figure is
- * divided by 260, 60 or 10 before it ever reaches an invoice — and that
- * conversion is invisible at the moment of typing. A rate of 28.85 entered
- * against "per week" is 48 halalas an hour, which nobody would agree to and
- * nobody would notice until the invoice came out at QAR 91.
+ * The rate is hourly because that is the figure the invoice prints and the
+ * office already works in. The arrangement — daily, weekly, monthly — is a
+ * term of the agreement and changes no arithmetic.
  *
- * So it is spelled out live, along with what a full month would come to, which
- * is the figure people can sanity-check against.
+ * The readout runs the other way, multiplying up to the period total, because
+ * that is the number a person recognises: "28.85 an hour" means little on its
+ * own, "7,501 for a full month" is instantly either right or absurd.
  */
 export function RateFields({
   defaultRateType,
@@ -51,16 +52,15 @@ export function RateFields({
     if (amountRef.current) amountRef.current.value = amount
   })
 
-  const halalas = parseQar(amount)
-  const perHour =
-    typeof halalas === 'number' && halalas > 0
-      ? hourlyRate(halalas, RATE_TYPE_HOURS[rateType] ?? 1)
-      : null
+  const perHour = parseQar(amount)
+  // Fallback covers a rateType read back from older data that is no longer in
+  // the list — the readout degrades rather than rendering "undefined hours".
+  const hoursInPeriod = RATE_TYPE_HOURS[rateType] ?? RATE_TYPE_HOURS.PER_MONTH
 
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Rate type" htmlFor="rateType">
+        <Field label="Hire arrangement" htmlFor="rateType">
           <select
             id="rateType"
             name="rateType"
@@ -78,9 +78,9 @@ export function RateFields({
         </Field>
 
         <Field
-          label="Rate (QAR)"
+          label="Hourly rate (QAR)"
           htmlFor="rateAmount"
-          hint="Decimals are fine — 137.50 is stored exactly."
+          hint="What the customer pays per hour. Decimals are fine — 137.50 is stored exactly."
         >
           <input
             id="rateAmount"
@@ -95,15 +95,15 @@ export function RateFields({
         </Field>
       </div>
 
-      {perHour !== null && (
+      {typeof perHour === 'number' && perHour > 0 && (
         <p className="rounded-md bg-slate-50 px-4 py-3 text-xs text-slate-600 ring-1 ring-inset ring-slate-200">
-          Bills at{' '}
+          QAR {formatAmountExact(perHour)} an hour comes to{' '}
           <span className="font-medium text-slate-900">
-            QAR {formatAmountExact(perHour)} an hour
+            QAR {formatAmountExact(periodTotal(perHour, hoursInPeriod))} for a
+            full {RATE_TYPE_PERIOD_LABELS[rateType]}
           </span>{' '}
-          — QAR {formatAmountExact(perHour * RATE_TYPE_HOURS.PER_MONTH)} for a
-          full month of 260 hours. Every invoice is billed in hours, whatever
-          the rate was agreed in.
+          of {hoursInPeriod} hours. Invoices bill the hours actually worked, so
+          a part period is simply fewer of them.
         </p>
       )}
     </>
