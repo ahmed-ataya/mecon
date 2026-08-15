@@ -43,10 +43,9 @@ document model being right.
   site/certificate checks. Not started; scoped separately from A1-A3 at the
   user's request.
 
-## PHASE B — Third party certificates and site eligibility
+## PHASE B — Third party certificates and site eligibility ✅ Done
 
-Depends on Phase A **and now on E0** (see below) — reordered 2026-08-15.
-Not started.
+Depended on Phase A and E0 (see below) — reordered 2026-08-15, then built.
 
 **Sequencing decision**: E0 (Employee table) was originally the first step
 of Phase E, gated behind Phase D. On closer read of the detailed HR spec,
@@ -62,26 +61,46 @@ Employee.** E0 is smaller than a full rename suggests — Prisma model rename
 with `@@map` to keep the physical table stable is a schema-file change plus
 one small migration, not a rewrite.
 
-- **B1 — 3rd party certificate model.** Two types, stored as separate
-  records, never a single dropdown: **Assessment** (normal, general sites)
-  and **TPC/QE** (QatarEnergy, 3-day training, higher level). "TPE" in
-  source notes = TPC/QE, same concept, name it consistently. An operator or
-  machine can hold one, both, or neither. Each record: type, certificate
-  number, issuing company, issue date, expiry date.
-- **B2 — Operator new fields.** Gate Pass (document type, optional,
-  project-dependent), machines qualified to operate (multi-select against
-  equipment types), H2S Certificate, Defensive Driving Certificate, 3rd
-  party certificate(s) per B1.
-  - **Superseded by the HR spec below**: Operator becomes a category on the
-    unified Employee table (Phase E, E0), not its own table. Whatever gets
-    built here for "Operator" should be built with that merge in mind —
-    field shapes that transfer cleanly to Employee, not tightly coupled to
-    the Operator model in a way that has to be redone. Worth a design pass
-    before starting B2, not after.
-- **B3 — Operator site eligibility.** Extends the existing equipment/site
-  warning. On a QatarEnergy contract, the assigned operator needs: valid
-  TPC/QE (Assessment alone is not sufficient), valid H2S, valid Defensive
-  Driving. Warn on missing/expired, same non-blocking pattern.
+- [x] **B1 — 3rd party certificate model.** Assessment and TPC/QE are
+  separate records — the model already supported "one, both, or neither"
+  (nothing stopped two `3rd Party Certificate` rows on one owner); the real
+  gap was a field for which tier a given one is. `thirdPartyType`'s option
+  list is now owner-specific, the same way `documentType` already is:
+  equipment keeps its six existing values, operator's is exactly
+  `Assessment | TPC/QE`. One existing operator row (`Operator Competency`)
+  migrated to `TPC/QE`, following its own `approvedFor` signal
+  (QATAR_ENERGY), not a default guess.
+- [x] **B2 — Operator new fields.** Gate Pass, H2S Certificate, Defensive
+  Driving Certificate added as operator document types — Gate Pass
+  specifically completing the move A2 started. "Machines qualified to
+  operate" needed real new structure: `OperatorQualification`, a join table,
+  since equipment type is free text with suggestions, not a closed set.
+  Built on `Employee` directly, per the E0 reorder below — no rework needed.
+  First genuinely multi-value picker in the app
+  ([`MultiCombobox`](src/components/ui/MultiCombobox.tsx)) — built as its
+  own component rather than bent onto `Combobox`, whose `allowCustom` fires
+  on every keystroke (correct for a single-value field, wrong for a
+  discrete multi-add).
+- [x] **B3 — Operator site eligibility.** QatarEnergy only — confirmed with
+  the user rather than assumed, since the equipment-side certificate check
+  covers three sites (QatarEnergy, Ras Laffan, Mesaieed) and this could
+  easily have been read as the same list. It isn't. One warning per unmet
+  requirement (TPC/QE specifically — Assessment alone insufficient — H2S,
+  Defensive Driving), wired into both the live contract form and the
+  contract detail page. Verified against a real contract already in the
+  system (Lusail Boulevard / Rajesh Kumar) that genuinely had none of the
+  three on file.
+
+**Sequencing decision (2026-08-15)**: E0 (Employee table) was originally
+the first step of Phase E, gated behind Phase D. On closer read of the
+detailed HR spec, that gate is narrower than it first looked — only
+**E3 (payroll)** is gated behind D, because payroll reads timesheets. E0
+itself has no dependency on timesheets at all. Since B2 adds fields
+directly to the Operator model, and E0 later folds Operator into a unified
+Employee table anyway, building B2 on Operator would have meant doing that
+migration twice. Confirmed with the user there was no urgency on B3's
+compliance check specifically, so E0 was pulled forward and built first —
+see below.
 
 ## PHASE C — Document file upload
 
