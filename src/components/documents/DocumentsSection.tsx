@@ -75,6 +75,7 @@ export function DocumentsSection({
           <DocumentForm
             ownerType={ownerType}
             ownerId={ownerId}
+            siblingDocuments={documents}
             action={createDocument}
             onDone={closeForm}
           />
@@ -94,6 +95,7 @@ export function DocumentsSection({
                   ownerType={ownerType}
                   ownerId={ownerId}
                   document={document}
+                  siblingDocuments={documents}
                   action={updateDocument.bind(null, document.id)}
                   onDone={closeForm}
                 />

@@ -8,9 +8,11 @@ import { WARNING_CLASSES, worstSeverity, type Warning } from '@/lib/warnings'
 export function WarningList({
   warnings,
   title = 'Warnings',
+  footer = 'These do not prevent saving — record the contract and resolve them separately.',
 }: {
   warnings: Warning[]
   title?: string
+  footer?: string
 }) {
   if (warnings.length === 0) return null
 
@@ -36,10 +38,7 @@ export function WarningList({
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-xs opacity-75">
-        These do not prevent saving — record the contract and resolve them
-        separately.
-      </p>
+      <p className="mt-2 text-xs opacity-75">{footer}</p>
     </div>
   )
 }

@@ -9,6 +9,7 @@ import {
   THIRD_PARTY_TYPES,
   type OwnerType,
 } from '@/lib/enums'
+import { permitExceedsRegistration } from '@/lib/equipment-warnings'
 import { Select } from '@/components/ui/Select'
 import {
   Field,
@@ -38,6 +39,21 @@ import type { DocumentWithApprovals } from './types'
  * caller before this existed: nothing reads the VALUE of documentNumber for
  * any logic, it is display-only, so relabeling it needed no migration.
  */
+const MONTHS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+] as const
+
+/**
+ * DD MMM YYYY from a YYYY-MM-DD string — NOT via `new Date(string)`, which
+ * would parse as UTC midnight and then print in the browser's local
+ * timezone, silently shifting the displayed day. Split, don't parse.
+ */
+function formatDateString(value: string): string {
+  const [year, month, day] = value.split('-')
+  return `${day} ${MONTHS[Number(month) - 1]} ${year}`
+}
+
 function documentNumberLabel(documentType: string): string {
   switch (documentType) {
     case 'Insurance':
@@ -54,12 +70,18 @@ export function DocumentForm({
   ownerType,
   ownerId,
   document,
+  siblingDocuments = [],
   action,
   onDone,
 }: {
   ownerType: OwnerType
   ownerId: string
   document?: DocumentWithApprovals
+  /** Every OTHER document already on this owner — this document included is
+   * harmless, since the checks below only ever look for a DIFFERENT type
+   * (Registration) than the one being edited (Other). Used to validate on
+   * entry rather than only after saving. */
+  siblingDocuments?: DocumentWithApprovals[]
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
   onDone: () => void
 }) {
@@ -86,8 +108,23 @@ export function DocumentForm({
   // These drive the conditional sections below as well as the submitted value.
   const [documentType, setDocumentType] = useState(initial.documentType)
   const [isApplicable, setIsApplicable] = useState(initial.isApplicable)
+  const [expiryDate, setExpiryDate] = useState(initial.expiryDate)
 
   const isThirdParty = documentType === THIRD_PARTY_CERTIFICATE
+
+  // A4: a permit/sticker recorded under Other must not outlive the machine's
+  // own Registration (Istimara) — validated here, as it is entered, not only
+  // after saving. Silent whenever there is nothing to compare against.
+  const registrationDocument = siblingDocuments.find(
+    (doc) => doc.documentType === 'Registration (Istimara)' && doc.isApplicable,
+  )
+  const permitExceedsRegistrationNow =
+    ownerType === 'EQUIPMENT' &&
+    documentType === 'Other' &&
+    isApplicable &&
+    !!expiryDate &&
+    !!registrationDocument?.expiryDate &&
+    permitExceedsRegistration(expiryDate, registrationDocument.expiryDate)
 
   // React resets the <form> after every action, including a failed one. Text
   // inputs survive that because React writes their defaultValue as a real DOM
@@ -182,6 +219,7 @@ export function DocumentForm({
               name="expiryDate"
               type="date"
               defaultValue={initial.expiryDate}
+              onChange={(event) => setExpiryDate(event.target.value)}
               className={inputClass}
             />
             {errors.expiryDate && (
@@ -189,6 +227,15 @@ export function DocumentForm({
             )}
           </Field>
         </div>
+      )}
+
+      {permitExceedsRegistrationNow && registrationDocument?.expiryDate && (
+        <p className="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-inset ring-amber-200">
+          This expires {formatDateString(expiryDate)}, after Registration
+          (Istimara) expires {formatDateString(registrationDocument.expiryDate)}.
+          Not blocked — check the permit&apos;s real expiry or that the
+          registration needs renewing too.
+        </p>
       )}
 
       {isThirdParty && (

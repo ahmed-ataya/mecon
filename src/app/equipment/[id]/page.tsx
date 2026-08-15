@@ -3,12 +3,14 @@ import { notFound } from 'next/navigation'
 import { db } from '@/lib/db'
 import { formatCapacity } from '@/lib/capacity'
 import { rollUpStatus, summarizeStatuses } from '@/lib/document-status'
+import { permitExceedsRegistrationWarnings } from '@/lib/equipment-warnings'
 import {
   serializeDocument,
   sortDocumentsByUrgency,
 } from '@/lib/serialize-document'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DocumentsSection } from '@/components/documents/DocumentsSection'
+import { WarningList } from '@/components/contracts/WarningList'
 import { buttonSecondaryClass } from '@/components/ui/form'
 
 export default async function EquipmentDetailPage({
@@ -29,6 +31,10 @@ export default async function EquipmentDetailPage({
   const { expired, expiringSoon } = summarizeStatuses(equipment.documents)
   const documents = sortDocumentsByUrgency(
     equipment.documents.map(serializeDocument),
+  )
+  const permitWarnings = permitExceedsRegistrationWarnings(
+    equipment.name,
+    equipment.documents,
   )
 
   return (
@@ -92,6 +98,12 @@ export default async function EquipmentDetailPage({
           )}
         </div>
       )}
+
+      <WarningList
+        warnings={permitWarnings}
+        title="Permit expiry beyond registration"
+        footer="These do not prevent saving — resolve by correcting the permit's expiry or renewing the registration."
+      />
 
       <section className="rounded-lg border border-slate-200 bg-white p-6">
         <h2 className="mb-4 font-semibold">Details</h2>
