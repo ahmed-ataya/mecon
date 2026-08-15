@@ -1,8 +1,9 @@
 # Inventory
 
 A map of what exists, kept separate from NOTES.md (which is *why* things are
-the way they are, not *what* things are). Start here when the question is
-"where does X live" rather than "why does X work this way."
+the way they are, not *what* things are) and from
+[ROADMAP.md](ROADMAP.md) (which is *what's coming next*). Start here when the
+question is "where does X live" rather than "why does X work this way."
 
 This is meant to grow. It started with pickers because a whole class of bug
 lived there and needed a record; add sections as they'd save the next lookup.
