@@ -171,10 +171,14 @@ pay above, never below.
    training beyond certifications, accommodation/camp management, GRSIA
    pension (only if the company employs Qatari nationals — confirm first).
 
-### E0 — Employee table (structural, first)
+### E0 — Employee table (structural, first) ✅ Done
 
-**Moved up — being built now, ahead of Phase B, not held for Phase D.**
-See the sequencing decision under Phase B above.
+Built ahead of Phase B, not held for Phase D — see the sequencing decision
+above. Physical table kept as `Operator` (`@@map`), so this landed as one
+additive column plus a Prisma-model rename, not a data migration. UI, routes
+and nav are untouched — still "Operators" throughout, since nothing yet
+exposes the other five categories. Every read that used to get "only
+operators" for free now filters explicitly on `category: 'OPERATOR'`.
 
 `Operator` becomes `Employee` with a `category` field. Operator assignments
 reference an Employee whose category is Operator. Reason: payroll, leave and
