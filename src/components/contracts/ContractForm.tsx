@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useActionState, useEffect, useState } from 'react'
 import {
   ARRANGEMENTS,
   ARRANGEMENT_LABELS,
@@ -66,6 +67,7 @@ export function ContractForm({
 }) {
   const [state, formAction, pending] = useActionState(action, {})
   const errors = state.errors ?? {}
+  const router = useRouter()
 
   // An unfinished form is kept in the browser, not the database — see
   // use-form-draft.ts. A restored draft is fed in through the SAME `values`
@@ -73,6 +75,22 @@ export function ContractForm({
   const draft = useFormDraft('mecon:contract-draft')
   const [restored, setRestored] = useState<Record<string, string> | null>(null)
   const [formGeneration, setFormGeneration] = useState(0)
+
+  // On success the action returns rather than redirecting itself, precisely so
+  // this can run: the draft must be cleared here, before navigating away, or
+  // it sits in localStorage forever and the "unfinished contract" banner
+  // greets every future visit to this page — including ones long after the
+  // contract it refers to was already created.
+  useEffect(() => {
+    if (state.ok && state.id) {
+      draft.clear()
+      router.push(`/contracts/${state.id}`)
+    }
+    // draft and router are stable across renders; state is the only real
+    // dependency, and re-running this for every keystroke's re-render would
+    // be harmless but pointless.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state])
 
   const values = state.values ?? restored ?? {}
 
@@ -420,8 +438,15 @@ export function ContractForm({
       <WarningList warnings={liveWarnings} title="Before you save" />
 
       <div className="flex gap-3">
-        <button type="submit" disabled={pending} className={buttonPrimaryClass}>
-          {pending ? 'Saving…' : 'Create contract'}
+        <button
+          type="submit"
+          disabled={pending || state.ok}
+          className={buttonPrimaryClass}
+        >
+          {/* state.ok covers the gap between the action resolving and the
+              redirect effect firing — without it the button re-enables and
+              reads "Create contract" for one frame before navigating away. */}
+          {pending ? 'Saving…' : state.ok ? 'Saved — opening…' : 'Create contract'}
         </button>
         <Link href={cancelHref} className={buttonSecondaryClass}>
           Cancel

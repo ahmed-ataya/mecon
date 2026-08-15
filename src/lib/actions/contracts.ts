@@ -15,6 +15,15 @@ import {
 export type ActionState = {
   errors?: Record<string, string>
   values?: Record<string, string>
+  /**
+   * Set on success INSTEAD OF redirecting server-side, for createContract only.
+   * The browser-only draft has to be cleared before navigating away, and a
+   * server-side redirect() unmounts the form first — there is no client-side
+   * moment left to do it in. Returning here gives the form that moment; it
+   * clears the draft and navigates itself. See ContractForm.tsx.
+   */
+  ok?: boolean
+  id?: string
 }
 
 function readForm(formData: FormData): Record<string, string> {
@@ -98,7 +107,7 @@ export async function createContract(
   })
 
   revalidatePath('/contracts')
-  redirect(`/contracts/${created.id}`)
+  return { ok: true, id: created.id }
 }
 
 export async function updateContract(
