@@ -2,7 +2,12 @@ import { db } from './db'
 import { describeLpo } from './lpo'
 import { rollUpStatus, type DocumentStatus } from './document-status'
 import { SITES, SITE_LABELS, type Site } from './enums'
-import { documentWarnings, siteApprovalWarning, type Warning } from './warnings'
+import {
+  documentWarnings,
+  operatorSiteEligibilityWarnings,
+  siteApprovalWarning,
+  type Warning,
+} from './warnings'
 
 /**
  * Options for the contract form's searchable dropdowns.
@@ -28,6 +33,12 @@ export type EquipmentOption = PartyOption & {
    * this is cheaper than shipping the certificates themselves.
    */
   siteWarnings: Record<string, Warning | null>
+}
+
+export type OperatorOption = PartyOption & {
+  /** Same idea as EquipmentOption.siteWarnings — B3 is QatarEnergy-only, so
+   * every other site resolves to an empty array, cheaply. */
+  siteWarnings: Record<string, Warning[]>
 }
 
 export async function loadCustomerOptions(): Promise<PartyOption[]> {
@@ -157,7 +168,7 @@ export async function loadMobilizedByOptions(): Promise<
     .map((name) => ({ value: name, label: name }))
 }
 
-export async function loadOperatorOptions(): Promise<PartyOption[]> {
+export async function loadOperatorOptions(): Promise<OperatorOption[]> {
   const operators = await db.employee.findMany({
     // Employee now holds every workforce category (Phase E0) — a contract's
     // operator picker should only ever offer actual operators.
@@ -166,11 +177,24 @@ export async function loadOperatorOptions(): Promise<PartyOption[]> {
     orderBy: { name: 'asc' },
   })
 
-  return operators.map((operator) => ({
-    value: operator.id,
-    label: operator.name,
-    sublabel: [operator.nationality, operator.phone].filter(Boolean).join(' · '),
-    status: rollUpStatus(operator.documents),
-    warnings: documentWarnings(operator.name, operator.documents),
-  }))
+  return operators.map((operator) => {
+    const siteWarnings: Record<string, Warning[]> = {}
+
+    for (const site of SITES) {
+      siteWarnings[site] = operatorSiteEligibilityWarnings(
+        operator.name,
+        site as Site,
+        operator.documents,
+      )
+    }
+
+    return {
+      value: operator.id,
+      label: operator.name,
+      sublabel: [operator.nationality, operator.phone].filter(Boolean).join(' · '),
+      status: rollUpStatus(operator.documents),
+      warnings: documentWarnings(operator.name, operator.documents),
+      siteWarnings,
+    }
+  })
 }

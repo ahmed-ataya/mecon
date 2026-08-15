@@ -156,6 +156,80 @@ export function siteApprovalWarning(
 }
 
 // ---------------------------------------------------------------------------
+// Operator site eligibility — Phase B3
+// ---------------------------------------------------------------------------
+
+type OperatorCertificateLike = DocumentLike & { thirdPartyType: string | null }
+
+/**
+ * QatarEnergy specifically requires the assigned operator to hold all three:
+ * a valid TPC/QE 3rd party certificate (Assessment alone does not count — see
+ * THIRD_PARTY_TYPES_BY_OWNER), a valid H2S Certificate, a valid Defensive
+ * Driving Certificate.
+ *
+ * QatarEnergy ONLY — confirmed deliberately, not assumed. This is NOT the
+ * same three-site list siteApprovalWarning uses (QatarEnergy, Ras Laffan,
+ * Mesaieed): that rule is about which company issued an equipment
+ * certificate, this one is specific operator competencies QatarEnergy alone
+ * requires.
+ *
+ * One warning per unmet requirement rather than a single bundled one, so
+ * whoever reads it sees exactly what is missing, not just that something is.
+ */
+export function operatorSiteEligibilityWarnings(
+  operatorName: string,
+  site: Site,
+  documents: OperatorCertificateLike[],
+  siteName?: string,
+): Warning[] {
+  if (site !== 'QATAR_ENERGY') return []
+
+  const where = siteName ? `${siteName} (${SITE_LABELS[site]})` : SITE_LABELS[site]
+
+  const holds = (matches: (document: OperatorCertificateLike) => boolean) =>
+    documents.some(
+      (document) =>
+        document.isApplicable &&
+        getDocumentStatus(document) !== 'EXPIRED' &&
+        matches(document),
+    )
+
+  const checks: {
+    code: string
+    label: string
+    note?: string
+    matches: (d: OperatorCertificateLike) => boolean
+  }[] = [
+    {
+      code: 'OPERATOR_MISSING_TPC_QE',
+      label: 'TPC/QE 3rd party certificate',
+      note: ' An Assessment certificate is not sufficient.',
+      matches: (d) => d.documentType === THIRD_PARTY_CERTIFICATE && d.thirdPartyType === 'TPC/QE',
+    },
+    {
+      code: 'OPERATOR_MISSING_H2S',
+      label: 'H2S Certificate',
+      matches: (d) => d.documentType === 'H2S Certificate',
+    },
+    {
+      code: 'OPERATOR_MISSING_DEFENSIVE_DRIVING',
+      label: 'Defensive Driving Certificate',
+      matches: (d) => d.documentType === 'Defensive Driving Certificate',
+    },
+  ]
+
+  return checks
+    .filter((check) => !holds(check.matches))
+    .map((check) => ({
+      code: check.code,
+      severity: 'RED',
+      message:
+        `${operatorName} has no valid ${check.label} on file, and ${where} requires one.` +
+        (check.note ?? ''),
+    }))
+}
+
+// ---------------------------------------------------------------------------
 // Double-booking
 // ---------------------------------------------------------------------------
 

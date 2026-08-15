@@ -14,6 +14,7 @@ import type {
   EquipmentOption,
   LocationOption,
   LpoOption,
+  OperatorOption,
   PartyOption,
 } from '@/lib/contract-options'
 import type { Warning } from '@/lib/warnings'
@@ -59,7 +60,7 @@ export function ContractForm({
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
   customers: PartyOption[]
   equipment: EquipmentOption[]
-  operators: PartyOption[]
+  operators: OperatorOption[]
   locations: LocationOption[]
   lpos: LpoOption[]
   mobilizedByOptions: { value: string; label: string }[]
@@ -149,6 +150,12 @@ export function ContractForm({
 
   const siteWarning = selectedMachine?.siteWarnings[siteRegime] ?? null
   if (siteWarning) liveWarnings.push(siteWarning)
+
+  // B3: QatarEnergy-specific operator eligibility (TPC/QE, H2S, Defensive
+  // Driving). Only meaningful when an operator is actually needed.
+  if (needsOperator) {
+    liveWarnings.push(...(selectedOperator?.siteWarnings[siteRegime] ?? []))
+  }
 
   return (
     <form

@@ -4,6 +4,7 @@ import { lpoValidityWarnings } from './lpo'
 import {
   documentWarnings,
   doubleBookingWarning,
+  operatorSiteEligibilityWarnings,
   siteApprovalWarning,
   type Warning,
 } from './warnings'
@@ -42,7 +43,10 @@ export type ContractForWarnings = {
   operatorAssignments: {
     startDate: Date
     endDate: Date | null
-    operator: { name: string; documents: DocumentLike[] } | null
+    operator: {
+      name: string
+      documents: (DocumentLike & { thirdPartyType: string | null })[]
+    } | null
   }[]
 }
 
@@ -86,8 +90,17 @@ export function getContractWarnings(
     if (hasAssignmentEnded(assignment)) continue
     if (!assignment.operator) continue
 
+    const { operator } = assignment
+
+    warnings.push(...documentWarnings(operator.name, operator.documents))
+
     warnings.push(
-      ...documentWarnings(assignment.operator.name, assignment.operator.documents),
+      ...operatorSiteEligibilityWarnings(
+        operator.name,
+        contract.siteRegime as Site,
+        operator.documents,
+        contract.siteName,
+      ),
     )
   }
 
