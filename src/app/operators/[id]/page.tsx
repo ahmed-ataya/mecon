@@ -20,7 +20,10 @@ export default async function OperatorDetailPage({
 
   const operator = await db.employee.findUnique({
     where: { id },
-    include: { documents: { include: { approvedFor: true } } },
+    include: {
+      documents: { include: { approvedFor: true } },
+      qualifications: { orderBy: { equipmentType: 'asc' } },
+    },
   })
 
   // Employee now holds every workforce category (Phase E0) — this page is
@@ -100,6 +103,27 @@ export default async function OperatorDetailPage({
           <Detail label="Source" value={sourceLabel} />
           <Detail label="Phone" value={operator.phone} />
           <Detail label="Nationality" value={operator.nationality} />
+          <div className="sm:col-span-2">
+            <dt className="text-xs uppercase tracking-wide text-slate-500">
+              Qualified to operate
+            </dt>
+            <dd className="mt-1">
+              {operator.qualifications.length === 0 ? (
+                <span className="text-slate-900">—</span>
+              ) : (
+                <ul className="flex flex-wrap gap-1.5">
+                  {operator.qualifications.map((q) => (
+                    <li
+                      key={q.id}
+                      className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-800"
+                    >
+                      {q.equipmentType}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </dd>
+          </div>
           <Detail label="Notes" value={operator.notes} />
         </dl>
       </section>

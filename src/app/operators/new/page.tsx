@@ -1,8 +1,11 @@
 import Link from 'next/link'
 import { OperatorForm } from '@/components/operators/OperatorForm'
 import { createOperator } from '@/lib/actions/operators'
+import { loadEquipmentTypeOptions } from '@/lib/equipment-options'
 
-export default function NewOperatorPage() {
+export default async function NewOperatorPage() {
+  const equipmentTypeOptions = await loadEquipmentTypeOptions()
+
   return (
     <div className="max-w-2xl space-y-6">
       <div>
@@ -24,6 +27,7 @@ export default function NewOperatorPage() {
       <div className="rounded-lg border border-slate-200 bg-white p-6">
         <OperatorForm
           action={createOperator}
+          equipmentTypeOptions={equipmentTypeOptions}
           submitLabel="Create operator"
           cancelHref="/operators"
         />

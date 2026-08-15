@@ -6,7 +6,7 @@ import {
   APPROVAL_BODY_LABELS,
   DOCUMENT_TYPES_BY_OWNER,
   THIRD_PARTY_CERTIFICATE,
-  THIRD_PARTY_TYPES,
+  THIRD_PARTY_TYPES_BY_OWNER,
   type OwnerType,
 } from '@/lib/enums'
 import { permitExceedsRegistration } from '@/lib/equipment-warnings'
@@ -248,7 +248,7 @@ export function DocumentForm({
             <Field label="3rd party type" htmlFor="thirdPartyType">
               <Select
                 name="thirdPartyType"
-                options={THIRD_PARTY_TYPES.map((type) => ({
+                options={THIRD_PARTY_TYPES_BY_OWNER[ownerType].map((type) => ({
                   value: type,
                   label: type,
                 }))}

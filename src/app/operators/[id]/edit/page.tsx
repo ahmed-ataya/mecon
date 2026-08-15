@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { db } from '@/lib/db'
 import { OperatorForm } from '@/components/operators/OperatorForm'
 import { updateOperator } from '@/lib/actions/operators'
+import { loadEquipmentTypeOptions } from '@/lib/equipment-options'
 
 export default async function EditOperatorPage({
   params,
@@ -10,7 +11,13 @@ export default async function EditOperatorPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const operator = await db.employee.findUnique({ where: { id } })
+  const [operator, equipmentTypeOptions] = await Promise.all([
+    db.employee.findUnique({
+      where: { id },
+      include: { qualifications: true },
+    }),
+    loadEquipmentTypeOptions(),
+  ])
 
   // See src/app/operators/[id]/page.tsx for why category is checked here too.
   if (!operator || operator.category !== 'OPERATOR') notFound()
@@ -36,6 +43,8 @@ export default async function EditOperatorPage({
         <OperatorForm
           action={action}
           operator={operator}
+          equipmentTypeOptions={equipmentTypeOptions}
+          qualifiedTypes={operator.qualifications.map((q) => q.equipmentType)}
           submitLabel="Save changes"
           cancelHref={`/operators/${id}`}
         />

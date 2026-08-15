@@ -127,8 +127,9 @@ model Employee {
 
   notes String?
 
-  documents   Document[]
-  assignments OperatorAssignment[]
+  documents      Document[]
+  assignments    OperatorAssignment[]
+  qualifications OperatorQualification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -136,6 +137,24 @@ model Employee {
   @@index([name])
   @@index([category])
   @@map("Operator")
+}
+
+/// Which equipment TYPES (not specific machines) an operator is qualified to
+/// run — Phase B2. Free text, not an enum, for the same reason equipment type
+/// itself is free text: a fixed list would force a new class of machine into
+/// "Other" the day the fleet buys one. Suggestions come from the same source
+/// equipment type entry already uses — see src/lib/equipment-options.ts.
+model OperatorQualification {
+  id         String   @id @default(cuid())
+  operatorId String
+  operator   Employee @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+
+  equipmentType String
+
+  createdAt DateTime @default(now())
+
+  @@unique([operatorId, equipmentType])
+  @@index([operatorId])
 }
 
 // ---------------------------------------------------------------------------

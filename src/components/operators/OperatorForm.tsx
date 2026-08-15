@@ -5,6 +5,8 @@ import { useActionState } from 'react'
 import type { Employee } from '@prisma/client'
 import { OPERATOR_SOURCES, OPERATOR_SOURCE_LABELS } from '@/lib/enums'
 import { Select } from '@/components/ui/Select'
+import { MultiCombobox } from '@/components/ui/MultiCombobox'
+import type { ComboboxOption } from '@/components/ui/Combobox'
 import {
   Field,
   FormError,
@@ -18,11 +20,18 @@ import type { ActionState } from '@/lib/actions/operators'
 export function OperatorForm({
   action,
   operator,
+  equipmentTypeOptions,
+  qualifiedTypes = [],
   submitLabel,
   cancelHref,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
   operator?: Employee
+  /** Suggestions for "machines qualified to operate" — same source equipment
+   * type entry already uses, so the vocabulary stays one list. */
+  equipmentTypeOptions: ComboboxOption[]
+  /** Equipment types this operator is already recorded as qualified for. */
+  qualifiedTypes?: string[]
   submitLabel: string
   cancelHref: string
 }) {
@@ -38,6 +47,7 @@ export function OperatorForm({
     nationality: values?.nationality ?? operator?.nationality ?? '',
     source: values?.source ?? operator?.source ?? OPERATOR_SOURCES[0],
     notes: values?.notes ?? operator?.notes ?? '',
+    qualifiedTypes: values?.qualifiedEquipmentTypes ?? qualifiedTypes,
   }
 
   return (
@@ -96,6 +106,19 @@ export function OperatorForm({
           />
         </Field>
       </div>
+
+      <Field
+        label="Machines qualified to operate"
+        htmlFor="qualifiedEquipmentTypes"
+        hint="Not a closed list — type anything, or pick a suggestion."
+      >
+        <MultiCombobox
+          name="qualifiedEquipmentTypes"
+          options={equipmentTypeOptions}
+          defaultValues={initial.qualifiedTypes}
+          placeholder="e.g. Excavator, Boom Truck…"
+        />
+      </Field>
 
       <Field label="Notes" htmlFor="notes">
         <textarea

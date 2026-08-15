@@ -143,6 +143,12 @@ export const OPERATOR_DOCUMENT_TYPES = [
   'Medical Certificate',
   '3rd Party Certificate',
   'Passport',
+  // Added Phase B — Gate Pass moved here from equipment (2026-08-15, see
+  // EQUIPMENT_DOCUMENT_TYPES); H2S and Defensive Driving are always separate
+  // records, never a single combined certificate.
+  'Gate Pass',
+  'H2S Certificate',
+  'Defensive Driving Certificate',
   'Other',
 ] as const
 
@@ -156,7 +162,7 @@ export const DOCUMENT_TYPES_BY_OWNER: Record<OwnerType, readonly string[]> = {
 /** The one document type that unlocks the 3rd party fields. */
 export const THIRD_PARTY_CERTIFICATE = '3rd Party Certificate'
 
-export const THIRD_PARTY_TYPES = [
+export const EQUIPMENT_THIRD_PARTY_TYPES = [
   'Lifting Equipment Cert',
   'Load Test',
   'Operator Competency',
@@ -164,7 +170,29 @@ export const THIRD_PARTY_TYPES = [
   'Pressure Vessel',
   'Other',
 ] as const
-export type ThirdPartyType = (typeof THIRD_PARTY_TYPES)[number]
+
+/**
+ * Phase B1 — exactly two tiers, not mutually exclusive. An operator can hold
+ * Assessment, TPC/QE, both, or neither; each is its own Document row (nothing
+ * stops two '3rd Party Certificate' documents on one operator today — the
+ * only gap was a field to say which tier a given one is). "TPE" in the
+ * business's own notes is the same thing as TPC/QE; this is the one name
+ * used everywhere in the UI.
+ *
+ * Assessment — the normal one, accepted at general sites.
+ * TPC/QE — the QatarEnergy one: 3-day training, higher level. Holding
+ * Assessment does not substitute for this — see B3's site eligibility check.
+ */
+export const OPERATOR_THIRD_PARTY_TYPES = ['Assessment', 'TPC/QE'] as const
+
+/** Which 3rd party type list applies depends on the document's owner. */
+export const THIRD_PARTY_TYPES_BY_OWNER: Record<OwnerType, readonly string[]> = {
+  CUSTOMER: [], // customers never carry a 3rd party certificate
+  EQUIPMENT: EQUIPMENT_THIRD_PARTY_TYPES,
+  OPERATOR: OPERATOR_THIRD_PARTY_TYPES,
+}
+
+export type ThirdPartyType = (typeof EQUIPMENT_THIRD_PARTY_TYPES)[number]
 
 // --- Sites and approval bodies -------------------------------------------
 

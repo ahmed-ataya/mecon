@@ -13,7 +13,7 @@ import {
   RATE_TYPES,
   SITES,
   THIRD_PARTY_CERTIFICATE,
-  THIRD_PARTY_TYPES,
+  THIRD_PARTY_TYPES_BY_OWNER,
 } from './enums'
 import { parseDateInput } from './dates'
 import { parseQar } from './money'
@@ -182,8 +182,8 @@ export const documentSchema = z
       data.documentType !== THIRD_PARTY_CERTIFICATE ||
       !data.isApplicable ||
       (data.thirdPartyType !== null &&
-        THIRD_PARTY_TYPES.includes(
-          data.thirdPartyType as (typeof THIRD_PARTY_TYPES)[number],
+        THIRD_PARTY_TYPES_BY_OWNER[data.ownerType].includes(
+          data.thirdPartyType,
         )),
     {
       message: 'Select the 3rd party type',

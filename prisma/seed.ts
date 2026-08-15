@@ -391,7 +391,7 @@ async function main() {
             documentNumber: 'BV-OC-77219',
             issueDate: d('2026-04-18'),
             expiryDate: d('2027-04-17'),
-            thirdPartyType: 'Operator Competency',
+            thirdPartyType: 'TPC/QE',
             issuingCompany: 'Bureau Veritas',
             approvedFor: {
               create: [{ body: 'GENERAL_DOHA' }, { body: 'QATAR_ENERGY' }],

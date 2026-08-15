@@ -11,7 +11,9 @@ export type ActionState = {
   values?: OperatorFormValues
 }
 
-export type OperatorFormValues = ReturnType<typeof readOperatorForm>
+export type OperatorFormValues = ReturnType<typeof readOperatorForm> & {
+  qualifiedEquipmentTypes: string[]
+}
 
 function readOperatorForm(formData: FormData) {
   return {
@@ -23,22 +25,51 @@ function readOperatorForm(formData: FormData) {
   }
 }
 
+/**
+ * Phase B2 — which equipment types this operator is qualified to run.
+ *
+ * Folded into `values` on every path, including validation failure — a
+ * validation error on, say, the name field must not silently drop tags the
+ * user had just added. A field left out of the echoed values on a failed
+ * submit has bitten this project before (the contract form's operator cost
+ * field, fixed earlier).
+ */
+function readQualifiedTypes(formData: FormData): string[] {
+  return [...new Set(
+    formData
+      .getAll('qualifiedEquipmentTypes')
+      .map((value) => String(value).trim())
+      .filter(Boolean),
+  )]
+}
+
 export async function createOperator(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
   const values = readOperatorForm(formData)
+  const qualifiedTypes = readQualifiedTypes(formData)
   const parsed = operatorSchema.safeParse(values)
 
   if (!parsed.success) {
-    return { errors: fieldErrors(parsed.error), values }
+    return {
+      errors: fieldErrors(parsed.error),
+      values: { ...values, qualifiedEquipmentTypes: qualifiedTypes },
+    }
   }
 
   const operator = await db.employee.create({
-    // Explicit, not just relying on the column default — this action is
-    // reached only from the operators UI, so it should only ever be able to
-    // create an operator (Phase E0: Employee now holds other categories too).
-    data: { ...parsed.data, category: 'OPERATOR' },
+    data: {
+      ...parsed.data,
+      // Explicit, not just relying on the column default — this action is
+      // reached only from the operators UI, so it should only ever be able
+      // to create an operator (Phase E0: Employee now holds other categories
+      // too).
+      category: 'OPERATOR',
+      qualifications: {
+        create: qualifiedTypes.map((equipmentType) => ({ equipmentType })),
+      },
+    },
   })
 
   revalidatePath('/operators')
@@ -51,13 +82,29 @@ export async function updateOperator(
   formData: FormData,
 ): Promise<ActionState> {
   const values = readOperatorForm(formData)
+  const qualifiedTypes = readQualifiedTypes(formData)
   const parsed = operatorSchema.safeParse(values)
 
   if (!parsed.success) {
-    return { errors: fieldErrors(parsed.error), values }
+    return {
+      errors: fieldErrors(parsed.error),
+      values: { ...values, qualifiedEquipmentTypes: qualifiedTypes },
+    }
   }
 
-  await db.employee.update({ where: { id }, data: parsed.data })
+  // Nested write, not a $transaction — see updateDocument's approvedFor for
+  // why: Neon's pooled connection plus a cold start pushed $transaction past
+  // its start timeout here before.
+  await db.employee.update({
+    where: { id },
+    data: {
+      ...parsed.data,
+      qualifications: {
+        deleteMany: {},
+        create: qualifiedTypes.map((equipmentType) => ({ equipmentType })),
+      },
+    },
+  })
 
   revalidatePath('/operators')
   revalidatePath(`/operators/${id}`)
