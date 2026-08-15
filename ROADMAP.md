@@ -45,7 +45,22 @@ document model being right.
 
 ## PHASE B — Third party certificates and site eligibility
 
-Depends on Phase A. Not started.
+Depends on Phase A **and now on E0** (see below) — reordered 2026-08-15.
+Not started.
+
+**Sequencing decision**: E0 (Employee table) was originally the first step
+of Phase E, gated behind Phase D. On closer read of the detailed HR spec,
+that gate is narrower than it first looked — only **E3 (payroll)** is
+gated behind D, because payroll reads timesheets. E0 itself has no
+dependency on timesheets at all. Since B2 adds fields directly to the
+Operator model, and E0 later folds Operator into a unified Employee table
+anyway, building B2 on Operator now would mean doing that migration twice —
+once to add the fields, once to move them to Employee. Confirmed with the
+user there's no urgency on B3's QatarEnergy compliance check specifically,
+so the decision is: **do E0 first, then build all of Phase B directly on
+Employee.** E0 is smaller than a full rename suggests — Prisma model rename
+with `@@map` to keep the physical table stable is a schema-file change plus
+one small migration, not a rewrite.
 
 - **B1 — 3rd party certificate model.** Two types, stored as separate
   records, never a single dropdown: **Assessment** (normal, general sites)
@@ -157,6 +172,9 @@ pay above, never below.
    pension (only if the company employs Qatari nationals — confirm first).
 
 ### E0 — Employee table (structural, first)
+
+**Moved up — being built now, ahead of Phase B, not held for Phase D.**
+See the sequencing decision under Phase B above.
 
 `Operator` becomes `Employee` with a `category` field. Operator assignments
 reference an Employee whose category is Operator. Reason: payroll, leave and
