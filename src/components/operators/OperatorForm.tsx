@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useActionState } from 'react'
-import type { Operator } from '@prisma/client'
+import type { Employee } from '@prisma/client'
 import { OPERATOR_SOURCES, OPERATOR_SOURCE_LABELS } from '@/lib/enums'
 import { Select } from '@/components/ui/Select'
 import {
@@ -22,7 +22,7 @@ export function OperatorForm({
   cancelHref,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
-  operator?: Operator
+  operator?: Employee
   submitLabel: string
   cancelHref: string
 }) {

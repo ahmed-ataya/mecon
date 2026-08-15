@@ -10,9 +10,10 @@ export default async function EditOperatorPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const operator = await db.operator.findUnique({ where: { id } })
+  const operator = await db.employee.findUnique({ where: { id } })
 
-  if (!operator) notFound()
+  // See src/app/operators/[id]/page.tsx for why category is checked here too.
+  if (!operator || operator.category !== 'OPERATOR') notFound()
 
   // Bind the id so the shared form keeps the same (state, formData) shape.
   const action = updateOperator.bind(null, id)

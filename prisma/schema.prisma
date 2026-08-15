@@ -101,11 +101,26 @@ model Equipment {
   @@index([brand])
 }
 
-model Operator {
+/// Operator became Employee 2026-08-15, ahead of the rest of the HR module
+/// (see ROADMAP.md, Phase E0) — pulled forward because Phase B was about to
+/// add operator-specific fields that would otherwise need migrating twice.
+///
+/// The physical table stays named "Operator" (@@map below): this is a
+/// Prisma-model-level rename, not a data migration. Nothing moved.
+model Employee {
   id          String  @id @default(cuid())
   name        String
   phone       String?
   nationality String?
+
+  /// OPERATOR | DRIVER | MECHANIC_WORKSHOP | HELPER_LABOURER | ADMIN_OFFICE
+  /// | MANAGEMENT
+  ///
+  /// Every existing and currently-creatable row is OPERATOR — nothing in the
+  /// app exposes the other five yet, and the /operators UI still only ever
+  /// reads and writes category = OPERATOR. They exist here so Phase E's
+  /// later work (E1+) has the right column to build on, not to be used yet.
+  category String @default("OPERATOR")
 
   /// IN_HOUSE | MARKET
   source String @default("IN_HOUSE")
@@ -119,6 +134,8 @@ model Operator {
   updatedAt DateTime @updatedAt
 
   @@index([name])
+  @@index([category])
+  @@map("Operator")
 }
 
 // ---------------------------------------------------------------------------
@@ -142,7 +159,7 @@ model Document {
   equipmentId String?
   equipment   Equipment? @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
   operatorId  String?
-  operator    Operator?  @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  operator    Employee?  @relation(fields: [operatorId], references: [id], onDelete: Cascade)
 
   /// Allowed values depend on ownerType — validated in src/lib/enums.ts
   ///   Customer:  CR (Commercial Registration) | Commercial License
@@ -456,7 +473,7 @@ model OperatorAssignment {
   contractId String
   contract   Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
   operatorId String?
-  operator   Operator? @relation(fields: [operatorId], references: [id])
+  operator   Employee? @relation(fields: [operatorId], references: [id])
 
   /// Which machine this operator ran is NOT stored here. The contract covers a
   /// single machine, so it is already known — and a stored copy would drift out

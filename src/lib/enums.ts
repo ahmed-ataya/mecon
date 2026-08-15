@@ -64,7 +64,34 @@ export const CAPACITY_UNIT_LABELS: Record<CapacityUnit, string> = {
   OTHER: 'Other',
 }
 
-// --- Operators ------------------------------------------------------------
+// --- Employees (formerly Operators) ----------------------------------------
+
+/**
+ * Every category the Employee table is structured to hold, per Phase E0.
+ *
+ * Only OPERATOR is actually used anywhere yet — nothing in the app creates
+ * or picks the other five. They are listed here now so later phases (E1
+ * documents, E2 leave, E3 payroll) have the real values to build against,
+ * not because there is a category picker anywhere today.
+ */
+export const EMPLOYEE_CATEGORIES = [
+  'OPERATOR',
+  'DRIVER',
+  'MECHANIC_WORKSHOP',
+  'HELPER_LABOURER',
+  'ADMIN_OFFICE',
+  'MANAGEMENT',
+] as const
+export type EmployeeCategory = (typeof EMPLOYEE_CATEGORIES)[number]
+
+export const EMPLOYEE_CATEGORY_LABELS: Record<EmployeeCategory, string> = {
+  OPERATOR: 'Operator',
+  DRIVER: 'Driver',
+  MECHANIC_WORKSHOP: 'Mechanic / Workshop',
+  HELPER_LABOURER: 'Helper / Labourer',
+  ADMIN_OFFICE: 'Admin / Office',
+  MANAGEMENT: 'Management',
+}
 
 export const OPERATOR_SOURCES = ['IN_HOUSE', 'MARKET'] as const
 export type OperatorSource = (typeof OPERATOR_SOURCES)[number]

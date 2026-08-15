@@ -18,12 +18,15 @@ export default async function OperatorDetailPage({
 }) {
   const { id } = await params
 
-  const operator = await db.operator.findUnique({
+  const operator = await db.employee.findUnique({
     where: { id },
     include: { documents: { include: { approvedFor: true } } },
   })
 
-  if (!operator) notFound()
+  // Employee now holds every workforce category (Phase E0) — this page is
+  // specifically the operator view, so a non-operator id is a 404 here, not
+  // a leak into a page built around operator-shaped fields.
+  if (!operator || operator.category !== 'OPERATOR') notFound()
 
   const status = rollUpStatus(operator.documents)
   const { expired, expiringSoon } = summarizeStatuses(operator.documents)

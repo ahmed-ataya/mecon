@@ -158,7 +158,10 @@ export async function loadMobilizedByOptions(): Promise<
 }
 
 export async function loadOperatorOptions(): Promise<PartyOption[]> {
-  const operators = await db.operator.findMany({
+  const operators = await db.employee.findMany({
+    // Employee now holds every workforce category (Phase E0) — a contract's
+    // operator picker should only ever offer actual operators.
+    where: { category: 'OPERATOR' },
     include: { documents: true },
     orderBy: { name: 'asc' },
   })

@@ -14,17 +14,22 @@ export default async function OperatorsPage({
   const { q } = await searchParams
   const query = q?.trim() ?? ''
 
-  const operators = await db.operator.findMany({
-    where: query
-      ? {
-          OR: [
-            // Postgres LIKE is case-sensitive — see customers/page.tsx
-            { name: { contains: query, mode: 'insensitive' } },
-            { phone: { contains: query, mode: 'insensitive' } },
-            { nationality: { contains: query, mode: 'insensitive' } },
-          ],
-        }
-      : undefined,
+  const operators = await db.employee.findMany({
+    where: {
+      // Employee now holds every workforce category (Phase E0), but this
+      // page is still specifically the operators list.
+      category: 'OPERATOR',
+      ...(query
+        ? {
+            OR: [
+              // Postgres LIKE is case-sensitive — see customers/page.tsx
+              { name: { contains: query, mode: 'insensitive' } },
+              { phone: { contains: query, mode: 'insensitive' } },
+              { nationality: { contains: query, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    },
     include: { documents: true },
     orderBy: { name: 'asc' },
   })

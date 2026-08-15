@@ -51,7 +51,7 @@ async function main() {
   await db.document.deleteMany()
   await db.customer.deleteMany()
   await db.equipment.deleteMany()
-  await db.operator.deleteMany()
+  await db.employee.deleteMany()
 
   // --- Customers ----------------------------------------------------------
 
@@ -327,7 +327,7 @@ async function main() {
 
   // --- Operators ----------------------------------------------------------
 
-  const rajesh = await db.operator.create({
+  const rajesh = await db.employee.create({
     data: {
       name: 'Rajesh Kumar',
       phone: '+974 5541 2298',
@@ -363,7 +363,7 @@ async function main() {
     },
   })
 
-  const ashraf = await db.operator.create({
+  const ashraf = await db.employee.create({
     data: {
       name: 'Mohammed Ashraf',
       phone: '+974 5588 7014',
@@ -402,7 +402,7 @@ async function main() {
     },
   })
 
-  const sunil = await db.operator.create({
+  const sunil = await db.employee.create({
     data: {
       name: 'Sunil Prasad',
       phone: '+974 3320 9945',

@@ -34,7 +34,12 @@ export async function createOperator(
     return { errors: fieldErrors(parsed.error), values }
   }
 
-  const operator = await db.operator.create({ data: parsed.data })
+  const operator = await db.employee.create({
+    // Explicit, not just relying on the column default — this action is
+    // reached only from the operators UI, so it should only ever be able to
+    // create an operator (Phase E0: Employee now holds other categories too).
+    data: { ...parsed.data, category: 'OPERATOR' },
+  })
 
   revalidatePath('/operators')
   redirect(`/operators/${operator.id}`)
@@ -52,7 +57,7 @@ export async function updateOperator(
     return { errors: fieldErrors(parsed.error), values }
   }
 
-  await db.operator.update({ where: { id }, data: parsed.data })
+  await db.employee.update({ where: { id }, data: parsed.data })
 
   revalidatePath('/operators')
   revalidatePath(`/operators/${id}`)
@@ -72,7 +77,7 @@ export async function deleteOperator(id: string) {
     }
   }
 
-  await db.operator.delete({ where: { id } })
+  await db.employee.delete({ where: { id } })
 
   revalidatePath('/operators')
   redirect('/operators')
