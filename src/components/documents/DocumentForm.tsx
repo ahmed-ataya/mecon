@@ -30,6 +30,26 @@ import type { DocumentWithApprovals } from './types'
  *    Those fields stay mounted only while that type is selected, and the
  *    server drops any stale values if the type was switched before saving.
  */
+
+/**
+ * What staff actually need on file to avoid opening the PDF — not a generic
+ * "document number." One stored column (documentNumber); only the label
+ * changes, based on the type currently selected. Confirmed against every
+ * caller before this existed: nothing reads the VALUE of documentNumber for
+ * any logic, it is display-only, so relabeling it needed no migration.
+ */
+function documentNumberLabel(documentType: string): string {
+  switch (documentType) {
+    case 'Insurance':
+      return 'Policy Number'
+    case THIRD_PARTY_CERTIFICATE:
+      return 'Certificate Number'
+    case 'Registration (Istimara)':
+      return 'Registration Number'
+    default:
+      return 'Document number'
+  }
+}
 export function DocumentForm({
   ownerType,
   ownerId,
@@ -110,7 +130,7 @@ export function DocumentForm({
           )}
         </Field>
 
-        <Field label="Document number" htmlFor="documentNumber">
+        <Field label={documentNumberLabel(documentType)} htmlFor="documentNumber">
           <input
             id="documentNumber"
             name="documentNumber"

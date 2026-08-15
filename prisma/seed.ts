@@ -7,7 +7,7 @@ import { db } from '../src/lib/db'
  * Three problems are seeded deliberately, so the expiry and site-approval
  * logic has something to catch from day one:
  *
- *   1. Al Bandary Contracting — Trade License expired 12 Jun 2026
+ *   1. Al Bandary Contracting — Commercial License expired 12 Jun 2026
  *   2. Rajesh Kumar — Medical Certificate expired 20 Jul 2026
  *   3. Wheel Excavator #4 — 3rd Party Certificate approved for General Doha only,
  *      so it fails the check on any QatarEnergy / Ras Laffan / Mesaieed site
@@ -66,8 +66,8 @@ async function main() {
         create: [
           {
             ownerType: 'CUSTOMER',
-            // PROBLEM 1: expired trade license
-            documentType: 'Trade License',
+            // PROBLEM 1: expired commercial license
+            documentType: 'Commercial License',
             documentNumber: 'TL-58211',
             issueDate: d('2025-06-13'),
             expiryDate: d('2026-06-12'),
@@ -81,7 +81,7 @@ async function main() {
           },
           {
             ownerType: 'CUSTOMER',
-            documentType: 'VAT Certificate',
+            documentType: 'Other',
             documentNumber: 'VAT-99120',
             issueDate: d('2026-01-15'),
             expiryDate: null, // no expiry on this one
@@ -102,14 +102,14 @@ async function main() {
         create: [
           {
             ownerType: 'CUSTOMER',
-            documentType: 'Trade License',
+            documentType: 'Commercial License',
             documentNumber: 'TL-33017',
             issueDate: d('2026-03-01'),
             expiryDate: d('2027-02-28'),
           },
           {
             ownerType: 'CUSTOMER',
-            documentType: 'Insurance Certificate',
+            documentType: 'Other',
             documentNumber: 'INS-77410',
             issueDate: d('2025-09-01'),
             // expiring soon — inside the 30-day amber window
@@ -131,14 +131,14 @@ async function main() {
         create: [
           {
             ownerType: 'CUSTOMER',
-            documentType: 'Trade License',
+            documentType: 'Commercial License',
             documentNumber: 'TL-71904',
             issueDate: d('2026-05-10'),
             expiryDate: d('2027-05-09'),
           },
           {
             ownerType: 'CUSTOMER',
-            documentType: 'Company ID / CR Extract',
+            documentType: 'Computer Card',
             documentNumber: 'CRX-22087',
             issueDate: d('2026-04-02'),
             expiryDate: d('2027-04-01'),
@@ -173,7 +173,7 @@ async function main() {
           },
           {
             ownerType: 'EQUIPMENT',
-            documentType: 'Gate Pass',
+            documentType: 'Other',
             documentNumber: 'GP-RL-40881',
             issueDate: d('2026-02-22'),
             expiryDate: d('2027-02-22'),
@@ -242,7 +242,7 @@ async function main() {
           },
           {
             ownerType: 'EQUIPMENT',
-            documentType: 'Load Test Certificate',
+            documentType: 'Load Test',
             documentNumber: 'LT-2026-338',
             issueDate: d('2026-06-01'),
             expiryDate: d('2027-05-31'),
@@ -661,7 +661,7 @@ async function main() {
   console.log(`  operators  ${[rajesh, ashraf, sunil].length}`)
   console.log('')
   console.log('Deliberate problems:')
-  console.log('  Al Bandary Contracting — Trade License expired 12 Jun 2026')
+  console.log('  Al Bandary Contracting — Commercial License expired 12 Jun 2026')
   console.log('  Rajesh Kumar — Medical Certificate expired 20 Jul 2026')
   console.log('  Wheel Excavator #4 — 3rd party cert approved for General Doha only')
   console.log('')

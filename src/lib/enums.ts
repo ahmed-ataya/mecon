@@ -79,24 +79,33 @@ export const OPERATOR_SOURCE_LABELS: Record<OperatorSource, string> = {
 export const OWNER_TYPES = ['CUSTOMER', 'EQUIPMENT', 'OPERATOR'] as const
 export type OwnerType = (typeof OWNER_TYPES)[number]
 
+/**
+ * Replaced 2026-08-15 — the original list (Trade License, Commercial
+ * Registration, VAT Certificate, Company ID / CR Extract, Insurance
+ * Certificate) was wrong for what the business actually files under a
+ * customer. Existing rows were migrated, not dropped — see the migration
+ * dated 20260815120000.
+ */
 export const CUSTOMER_DOCUMENT_TYPES = [
-  'Trade License',
-  'Commercial Registration',
-  'VAT Certificate',
-  'Company ID / CR Extract',
-  'Insurance Certificate',
+  'CR (Commercial Registration)',
+  'Commercial License',
+  'Computer Card',
   'Other',
 ] as const
 
+/**
+ * Gate Pass removed 2026-08-15 — a site pass belongs to the person on site,
+ * not the machine. A later phase (see ROADMAP.md) adds it back under
+ * OPERATOR_DOCUMENT_TYPES instead; it is not there yet. Inspection Report was
+ * never actually used; Permit Sticker was never a real category here either.
+ * The one existing equipment Gate Pass row was migrated to Other rather than
+ * dropped — see the migration dated 20260815120000.
+ */
 export const EQUIPMENT_DOCUMENT_TYPES = [
   'Registration (Istimara)',
   'Insurance',
+  'Load Test',
   '3rd Party Certificate',
-  'Load Test Certificate',
-  'Inspection Report',
-  // "Gate Pass Expiry Date" on the master sheet. A site pass expires like any
-  // other document, so it belongs here and gets the same warnings for free.
-  'Gate Pass',
   'Other',
 ] as const
 

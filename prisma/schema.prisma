@@ -145,10 +145,10 @@ model Document {
   operator    Operator?  @relation(fields: [operatorId], references: [id], onDelete: Cascade)
 
   /// Allowed values depend on ownerType — validated in src/lib/enums.ts
-  ///   Customer:  Trade License | Commercial Registration | VAT Certificate
-  ///              | Company ID / CR Extract | Insurance Certificate | Other
-  ///   Equipment: Registration (Istimara) | Insurance | 3rd Party Certificate
-  ///              | Load Test Certificate | Inspection Report | Other
+  ///   Customer:  CR (Commercial Registration) | Commercial License
+  ///              | Computer Card | Other
+  ///   Equipment: Registration (Istimara) | Insurance | Load Test
+  ///              | 3rd Party Certificate | Other
   ///   Operator:  Qatar ID | Driving License | Operator License
   ///              | Medical Certificate | 3rd Party Certificate | Passport | Other
   documentType String
