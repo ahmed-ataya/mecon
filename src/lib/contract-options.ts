@@ -2,6 +2,7 @@ import { db } from './db'
 import { describeLpo } from './lpo'
 import { rollUpStatus, type DocumentStatus } from './document-status'
 import { SITES, SITE_LABELS, type Site } from './enums'
+import { loadEquipmentTypeOptions } from './equipment-options'
 import {
   documentWarnings,
   operatorSiteEligibilityWarnings,
@@ -27,6 +28,10 @@ export type PartyOption = {
 }
 
 export type EquipmentOption = PartyOption & {
+  /** The raw type string (e.g. "Skid Loader") — Phase B4/F5 needs this on
+   * the client to key OperatorOption.siteWarnings' machine-type dimension;
+   * `sublabel` bakes it into display text and isn't parseable back out. */
+  type: string
   /**
    * Pre-resolved per site, because the site is chosen on the same form and the
    * check has to update the moment either side changes. Only five sites, so
@@ -36,9 +41,20 @@ export type EquipmentOption = PartyOption & {
 }
 
 export type OperatorOption = PartyOption & {
-  /** Same idea as EquipmentOption.siteWarnings — B3 is QatarEnergy-only, so
-   * every other site resolves to an empty array, cheaply. */
-  siteWarnings: Record<string, Warning[]>
+  /**
+   * QatarEnergy-only TPC/QE + H2S + Defensive Driving eligibility (Phase
+   * B3). Every non-QatarEnergy site resolves to an empty array regardless
+   * of machine type, cheaply.
+   *
+   * Keyed by site, then by machine type — Phase B4/F5 made the TPC/QE part
+   * of this specific to the machine being assigned, so a flat per-site
+   * array (the pre-B4/F5 shape) can no longer say enough. The inner key is
+   * the equipment type exactly as it appears in the fleet (see
+   * loadEquipmentTypeOptions); `''` is the fallback for "no machine
+   * selected yet", where the TPC/QE check falls back to "holds one for any
+   * machine" rather than guessing wrong.
+   */
+  siteWarnings: Record<string, Record<string, Warning[]>>
 }
 
 export async function loadCustomerOptions(): Promise<PartyOption[]> {
@@ -77,6 +93,7 @@ export async function loadEquipmentOptions(): Promise<EquipmentOption[]> {
       value: machine.id,
       label: machine.name,
       sublabel: [machine.type, machine.plateNumber].filter(Boolean).join(' · '),
+      type: machine.type,
       status: rollUpStatus(machine.documents),
       warnings: documentWarnings(machine.name, machine.documents),
       siteWarnings,
@@ -169,23 +186,37 @@ export async function loadMobilizedByOptions(): Promise<
 }
 
 export async function loadOperatorOptions(): Promise<OperatorOption[]> {
-  const operators = await db.employee.findMany({
-    // Employee now holds every workforce category (Phase E0) — a contract's
-    // operator picker should only ever offer actual operators.
-    where: { category: 'OPERATOR' },
-    include: { documents: true },
-    orderBy: { name: 'asc' },
-  })
+  const [operators, equipmentTypes] = await Promise.all([
+    db.employee.findMany({
+      // Employee now holds every workforce category (Phase E0) — a
+      // contract's operator picker should only ever offer actual operators.
+      where: { category: 'OPERATOR' },
+      include: { documents: true },
+      orderBy: { name: 'asc' },
+    }),
+    loadEquipmentTypeOptions(),
+  ])
+
+  // '' is the fallback key for "no machine selected yet" — see
+  // OperatorOption.siteWarnings.
+  const machineTypeKeys = ['', ...equipmentTypes.map((t) => t.value)]
 
   return operators.map((operator) => {
-    const siteWarnings: Record<string, Warning[]> = {}
+    const siteWarnings: Record<string, Record<string, Warning[]>> = {}
 
     for (const site of SITES) {
-      siteWarnings[site] = operatorSiteEligibilityWarnings(
-        operator.name,
-        site as Site,
-        operator.documents,
-      )
+      const byMachineType: Record<string, Warning[]> = {}
+
+      for (const machineType of machineTypeKeys) {
+        byMachineType[machineType] = operatorSiteEligibilityWarnings(
+          operator.name,
+          site as Site,
+          operator.documents,
+          machineType || null,
+        )
+      }
+
+      siteWarnings[site] = byMachineType
     }
 
     return {

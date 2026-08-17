@@ -18,6 +18,31 @@ import { DocumentForm } from './DocumentForm'
 import type { DocumentWithApprovals } from './types'
 
 /**
+ * PDF and images render natively in a browser tab, so "View" is honest — the
+ * browser shows the file, it doesn't just save it. Anything else (were the
+ * allowed-type list ever widened beyond Phase C's PDF/image restriction)
+ * wouldn't render inline, so it gets the more accurate "Download".
+ */
+function fileActionLabel(fileType: string | null) {
+  if (fileType === 'application/pdf' || fileType?.startsWith('image/')) {
+    return 'View'
+  }
+  return 'Download'
+}
+
+/**
+ * "Other" alone is what every Other document used to be labelled — this is
+ * the whole point of F1: show what it actually is, falling back to the bare
+ * type on old-shaped data that predates the field.
+ */
+function documentHeading(document: DocumentWithApprovals) {
+  if (document.documentType === 'Other' && document.otherLabel) {
+    return `Other — ${document.otherLabel}`
+  }
+  return document.documentType
+}
+
+/**
  * Documents panel shared by Customers, Equipment and Operators — the owner
  * type decides which document types are offered and nothing else changes.
  */
@@ -25,10 +50,13 @@ export function DocumentsSection({
   ownerType,
   ownerId,
   documents,
+  equipmentTypeOptions = [],
 }: {
   ownerType: OwnerType
   ownerId: string
   documents: DocumentWithApprovals[]
+  /** Only meaningful for OPERATOR — see DocumentForm.tsx. */
+  equipmentTypeOptions?: { value: string; label: string }[]
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -76,6 +104,7 @@ export function DocumentsSection({
             ownerType={ownerType}
             ownerId={ownerId}
             siblingDocuments={documents}
+            equipmentTypeOptions={equipmentTypeOptions}
             action={createDocument}
             onDone={closeForm}
           />
@@ -96,6 +125,7 @@ export function DocumentsSection({
                   ownerId={ownerId}
                   document={document}
                   siblingDocuments={documents}
+                  equipmentTypeOptions={equipmentTypeOptions}
                   action={updateDocument.bind(null, document.id)}
                   onDone={closeForm}
                 />
@@ -104,13 +134,27 @@ export function DocumentsSection({
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium text-slate-900">
-                        {document.documentType}
+                        {documentHeading(document)}
                       </span>
                       <StatusBadge status={document.status} />
                       {document.documentNumber && (
                         <span className="text-xs text-slate-500">
                           {document.documentNumber}
                         </span>
+                      )}
+                      {document.fileUrl && (
+                        <a
+                          href={`/api/documents/${document.id}/file${
+                            fileActionLabel(document.fileType) === 'Download'
+                              ? '?download'
+                              : ''
+                          }`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-medium text-slate-600 underline hover:text-slate-900"
+                        >
+                          {fileActionLabel(document.fileType)}
+                        </a>
                       )}
                     </div>
 
@@ -126,6 +170,8 @@ export function DocumentsSection({
                         <div className="mt-2 space-y-1 text-sm text-slate-600">
                           <p>
                             {document.thirdPartyType ?? '—'}
+                            {document.certifiedEquipmentType &&
+                              ` · ${document.certifiedEquipmentType}`}
                             {document.issuingCompany &&
                               ` · ${document.issuingCompany}`}
                           </p>
@@ -150,6 +196,12 @@ export function DocumentsSection({
                           </p>
                         </div>
                       )}
+
+                    {document.notes && (
+                      <p className="mt-2 text-sm text-slate-500">
+                        {document.notes}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex shrink-0 gap-3 text-sm">

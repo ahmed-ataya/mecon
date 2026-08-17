@@ -3,12 +3,14 @@ import { notFound } from 'next/navigation'
 import { db } from '@/lib/db'
 import { formatCapacity } from '@/lib/capacity'
 import { rollUpStatus, summarizeStatuses } from '@/lib/document-status'
+import { computeCompleteness } from '@/lib/document-completeness'
 import { permitExceedsRegistrationWarnings } from '@/lib/equipment-warnings'
 import {
   serializeDocument,
   sortDocumentsByUrgency,
 } from '@/lib/serialize-document'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import { CompletenessCard } from '@/components/documents/CompletenessBar'
 import { DocumentsSection } from '@/components/documents/DocumentsSection'
 import { WarningList } from '@/components/contracts/WarningList'
 import { buttonSecondaryClass } from '@/components/ui/form'
@@ -36,6 +38,7 @@ export default async function EquipmentDetailPage({
     equipment.name,
     equipment.documents,
   )
+  const completeness = computeCompleteness('EQUIPMENT', equipment.documents)
 
   return (
     <div className="space-y-6">
@@ -128,6 +131,8 @@ export default async function EquipmentDetailPage({
           <Detail label="Notes" value={equipment.notes} />
         </dl>
       </section>
+
+      <CompletenessCard completeness={completeness} />
 
       <DocumentsSection
         ownerType="EQUIPMENT"

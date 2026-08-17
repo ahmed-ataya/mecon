@@ -2,7 +2,9 @@ import Link from 'next/link'
 import { db } from '@/lib/db'
 import { formatCapacity } from '@/lib/capacity'
 import { rollUpStatus, summarizeStatuses } from '@/lib/document-status'
+import { computeCompleteness } from '@/lib/document-completeness'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import { CompletenessBadge } from '@/components/documents/CompletenessBar'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { buttonPrimaryClass } from '@/components/ui/form'
 
@@ -69,6 +71,7 @@ export default async function EquipmentPage({
                 <th className="px-4 py-3 font-medium">Y-O-M</th>
                 <th className="px-4 py-3 font-medium">Reg. No.</th>
                 <th className="px-4 py-3 font-medium">Documents</th>
+                <th className="px-4 py-3 font-medium">Profile</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -77,6 +80,7 @@ export default async function EquipmentPage({
                 const { expired, expiringSoon, total } = summarizeStatuses(
                   machine.documents,
                 )
+                const completeness = computeCompleteness('EQUIPMENT', machine.documents)
 
                 return (
                   <tr key={machine.id} className="hover:bg-slate-50">
@@ -117,6 +121,9 @@ export default async function EquipmentPage({
                                 .join(' · ') || `${total} on file`}
                         </span>
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <CompletenessBadge completeness={completeness} />
                     </td>
                   </tr>
                 )

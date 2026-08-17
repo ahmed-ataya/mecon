@@ -152,9 +152,14 @@ export function ContractForm({
   if (siteWarning) liveWarnings.push(siteWarning)
 
   // B3: QatarEnergy-specific operator eligibility (TPC/QE, H2S, Defensive
-  // Driving). Only meaningful when an operator is actually needed.
+  // Driving). Only meaningful when an operator is actually needed. TPC/QE is
+  // machine-specific (B4/F5) — keyed by the selected machine's type, falling
+  // back to '' ("no machine picked yet") until one is.
   if (needsOperator) {
-    liveWarnings.push(...(selectedOperator?.siteWarnings[siteRegime] ?? []))
+    liveWarnings.push(
+      ...(selectedOperator?.siteWarnings[siteRegime]?.[selectedMachine?.type ?? ''] ??
+        []),
+    )
   }
 
   return (

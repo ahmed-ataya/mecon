@@ -9,7 +9,7 @@ code, today." This is "what are we building next, and why."
 
 ---
 
-## PHASE A — Document types and fields cleanup
+## PHASE A — Document types and fields cleanup ✅ Done
 
 Small, schema-touching, done first because everything else depends on the
 document model being right.
@@ -36,12 +36,26 @@ document model being right.
   type: `Insurance → Policy Number`, `3rd Party Certificate → Certificate
   Number`, `Registration (Istimara) → Registration Number`, else generic
   "Document number."
-- [ ] **A4 — Permit/registration expiry cross-check.** Where a permit or
-  sticker is recorded under Other on equipment, its expiry must not exceed
-  that machine's Registration document's expiry. Validate on entry,
-  non-blocking warning if exceeded — same pattern as the existing
-  site/certificate checks. Not started; scoped separately from A1-A3 at the
-  user's request.
+- [x] **A4 — Permit/registration expiry cross-check.** Built in `c42f381`,
+  right after this roadmap was first written — this checkbox just never got
+  updated to match (found and fixed 2026-08-17 while starting the next
+  phase). Where a permit or sticker is recorded under Other on equipment,
+  its expiry must not run past that machine's own Registration (Istimara)
+  expiry. One direction only: a non-Other document (3rd Party Certificate,
+  Insurance) outliving Registration is not flagged — confirmed live against
+  Wheel Excavator #4's actual 3rd Party Certificate, which does run past its
+  Registration and correctly stays quiet. Silent whenever there's nothing to
+  compare against (no applicable Registration on file, or one with no
+  expiry). One shared comparison
+  ([`permitExceedsRegistration`](src/lib/equipment-warnings.ts)), checked in
+  two places so they can't drift apart: live as it's entered
+  (`DocumentForm`, clears the moment the date stops crossing the line) and
+  standing on the equipment page (`permitExceedsRegistrationWarnings`, via
+  the same `WarningList` component B3 uses). Verified against real data
+  already in the system: the Gate Pass row A2 migrated to Other on Wheel
+  Excavator #4 turned out to already exceed that machine's Registration
+  expiry (22 Feb 2027 vs 19 Jan 2027) — a real instance of exactly what this
+  rule exists to catch, not a manufactured test case.
 
 ## PHASE B — Third party certificates and site eligibility ✅ Done
 
@@ -102,14 +116,165 @@ migration twice. Confirmed with the user there was no urgency on B3's
 compliance check specifically, so E0 was pulled forward and built first —
 see below.
 
-## PHASE C — Document file upload
+## PHASE C — Document file upload ✅ Done
 
-No dependency on B. Can run parallel to or right after Phase A. Not started.
+No dependency on B. Built right after Phase B, per the original plan.
 
-- PDF/image upload on every document record (customer, equipment, operator).
-- Store via Vercel Blob, URL kept on the document row.
-- View/download from the document list.
-- Replace a file without losing the record's history.
+- [x] **Schema.** `Document.filePath` — added in an earlier phase for a local
+  `storage/` directory, never actually wired up (see NOTES.md on why that
+  approach was abandoned) — replaced with `fileUrl`, `fileName`, `fileType`.
+  Migration `20260815170000_document_file_upload`.
+- [x] **Upload path.** The browser uploads straight to Vercel Blob via
+  `@vercel/blob/client`'s `upload()`, not through the create/update Server
+  Action. Reason: Next.js caps a Server Action body at 1MB by default, and
+  Vercel's serverless functions carry their own hard ceiling on top of that
+  regardless of config — both well under what a scanned certificate or a
+  phone photo of one produces. A route handler
+  ([`src/app/api/documents/upload/route.ts`](src/app/api/documents/upload/route.ts))
+  issues a scoped, short-lived client token via `handleUpload`; the file
+  bytes never touch a Next.js function at all. Once the browser upload
+  finishes, the resulting URL rides into the existing `createDocument`/
+  `updateDocument` actions as three hidden form fields — no change to how
+  those actions are invoked or validated otherwise.
+- [x] **Allowed types and size.** PDF or image, up to 20MB — see
+  `DOCUMENT_FILE_ALLOWED_TYPES`/`DOCUMENT_FILE_MAX_BYTES` in `enums.ts`.
+  Enforced twice: client-side before starting the upload (fast feedback,
+  UX only), and server-side as a constraint on the issued Blob token (the
+  real gate).
+- [x] **View/download.** The store is **private** — Vercel no longer offers
+  public stores for new accounts, and a real access check beats an
+  unguessable-URL model anyway. So the raw Blob URL is useless without
+  `BLOB_READ_WRITE_TOKEN`, which never leaves the server; the browser never
+  sees it. A new route,
+  [`src/app/api/documents/[id]/file/route.ts`](<src/app/api/documents/[id]/file/route.ts>),
+  looks the file up by document id (never by a client-supplied URL) and
+  streams it through, gated the same as everything else in the app — the
+  review-gate password (`src/middleware.ts`). Both the document list row and
+  the open edit form link there; `?download` forces a save-as instead of an
+  inline view.
+- [x] **Replace without losing history.** Replacing a file is an edit to the
+  same `Document` row through the existing update form, not a new record —
+  its type, dates, third-party fields etc. are untouched. The old blob is
+  deleted server-side once the new URL is saved (`deleteBlob` in
+  `src/lib/actions/documents.ts`), and likewise on delete, so replacing or
+  removing a file never leaves orphaned storage behind. Best-effort: a Blob
+  delete failure never blocks the save or delete that already succeeded in
+  the database.
+
+**Known gap**: if a user selects a replacement file and then cancels the form
+instead of saving, the newly-uploaded blob has already landed in storage and
+is now unreferenced — nothing sweeps that up. Accepted for now given this
+app's scale and the lack of any background-job infrastructure to run a
+cleanup pass; revisit if it turns out to matter in practice.
+
+**New env var**: `BLOB_READ_WRITE_TOKEN` — see `.env.example` and DEPLOY.md.
+Unlike `DATABASE_URL`, there's no local stand-in for Blob; local development
+needs a real (separate) store too.
+
+## PHASE B4 — Document fields, machine-specific certificates, profile completeness ✅ Done
+
+Business feedback, 2026-08-17. Scoped and agreed in chat, recorded here before
+building, same as every other phase. Migration
+`20260817190750_document_other_notes_certified_type_employee_number`.
+
+- [x] **F1 — "Other" document name.** `Document.otherLabel`. When Document
+  type is Other, a required free-text name field appears (e.g. "Fire
+  Extinguisher Certificate") so records under Other stop being
+  indistinguishable from each other. All three owner types. Required only
+  while Applicable is checked — same escape hatch the 3rd party fields
+  already use, so a deliberate "doesn't apply" record can stay empty. The
+  document list and edit form both show it in place of the bare word
+  "Other" (`documentHeading()` in `DocumentsSection.tsx`).
+- [x] **F2 — Document notes.** `Document.notes`. Free-text, every document
+  record, every owner type, always available — not conditional on type.
+- [x] **F3 — Employee number.** `Employee.employeeNumber`. Schema field
+  only, as agreed — no UI reads or writes it yet; surfaces when Phase E
+  (HR) is built.
+- [x] **F4 — Machines qualified to operate.** Turned out to already exist —
+  built in Phase B2 (`OperatorQualification`), shown on the Operator form
+  as "Machines qualified to operate" with a multi-select. Confirmed while
+  scoping this phase; no work needed.
+- [x] **F5 — TPC/QE is machine-specific.** `Document.certifiedEquipmentType`
+  — an operator can hold a separate 3rd party certificate per machine
+  type — someone running a skid loader and a wheel loader needs two.
+  Applies to Assessment and TPC/QE both, OPERATOR owner only; reuses the
+  same equipment-type vocabulary as `OperatorQualification` and
+  `Equipment.type`, via the same `Combobox` pattern. Multiple 3rd party
+  certificates per operator already worked at the DB level (Phase B1) —
+  this makes the multiplicity meaningful instead of ambiguous.
+
+  The QatarEnergy site-eligibility check (`operatorSiteEligibilityWarnings`
+  in `src/lib/warnings.ts`) now checks the operator holds a valid
+  certificate for the SPECIFIC machine type being assigned, not merely any
+  certificate — three distinct outcomes, each its own warning code:
+  `OPERATOR_MISSING_TPC_QE` (none at all), `OPERATOR_TPC_QE_EXPIRED` (held
+  for this exact machine, not currently valid), `OPERATOR_TPC_QE_WRONG_MACHINE`
+  (held, but only for a different machine — named in the message).
+
+  This check used to only show live in the contract creation form and
+  passively on the contract detail page after saving — replacing an
+  operator mid-contract showed no live warning at all. Now fires live in
+  both replacement flows too:
+  - Replacing the **operator** on a contract (`OperatorTimeline`) — the
+    gap the user pointed out directly.
+  - Replacing the **equipment** on a contract (`EquipmentTimeline`) — not
+    explicitly asked for, but falls out of the same rule: swapping a crane
+    for a different machine type mid-contract invalidates the current
+    operator's certificate coverage exactly the same way. Confirmed in
+    scope with the user before building.
+
+  `OperatorOption.siteWarnings` (`src/lib/contract-options.ts`) went from
+  one array per site to one array per site *per machine type currently in
+  the fleet* — still computed server-side, same reasoning as before
+  (raw documents never reach the browser). `EquipmentOption` gained a
+  plain `type` field so the client has something to key that lookup with
+  beyond the formatted `sublabel`.
+
+  Verified live against real data already in the system, not a
+  manufactured case: Rajesh Kumar (assigned to Lusail Boulevard, a
+  QatarEnergy contract currently running a Crane) was given a TPC/QE
+  certificate for Skid Loader. The contract detail page, the live
+  operator-replace form, and the live equipment-replace form all
+  correctly read *"holds a TPC/QE 3rd party certificate for Skid Loader,
+  not Crane"* — and switching the replacement machine to a Wheel
+  Excavator live-updated the message to *"not Wheel Excavator"* without a
+  save. Test data removed afterward.
+- [x] **F6 — Profile completeness bar.** `src/lib/document-completeness.ts`
+  (`computeCompleteness`) plus `CompletenessBadge`/`CompletenessCard`
+  (`src/components/documents/CompletenessBar.tsx`). Customer, Equipment
+  and Operator detail pages (and a compact version on the list pages) get
+  a completion bar: 100% once every document type besides Other has been
+  addressed — either a real, applicable document with its file uploaded,
+  or a deliberate "not applicable" record. A missing row (never created
+  at all) is the only thing that counts against it — this is what makes
+  "nobody has looked at this record's paperwork" distinguishable from
+  "someone checked and confirmed nothing applies," which used to look
+  identical (both rendered as the same neutral grey badge).
+
+  Decided while scoping: expiry does NOT affect the bar — an expired
+  document was still addressed, it's just stale now, and the existing
+  Valid/Expiring/Expired badges already cover that separately. The FILE
+  has to actually be uploaded for an applicable document to count, not
+  just the record fields — otherwise the bar can hit 100% with no real
+  paperwork attached, which would defeat the point of Phase C.
+
+  For an operator's 3rd Party Certificate item specifically: complete
+  only when every machine type they're qualified for (F4's multi-select)
+  has a valid certificate covering it, not merely "at least one exists" —
+  otherwise an operator qualified for three machines but certified for
+  one would incorrectly show as fully covered. Collapses back to a single
+  generic item when there are no qualifications to check against, or once
+  any 3rd party certificate row is explicitly marked not applicable.
+
+  Verified live: Backhoe Loader + Hammer #1 (2 real documents on file,
+  neither with a file attached yet) correctly showed 25%, 1 of 4, with
+  Registration/Insurance/Load Test listed as missing despite Registration
+  having real dates and a document number — proving the "file required"
+  rule actually holds. Giving Rajesh Kumar two machine qualifications
+  (Skid Loader, Wheel Loader) correctly expanded the checklist to 10
+  items and listed both as separate missing entries; adding one
+  certificate with a file for Skid Loader correctly dropped only that one
+  from the list. Test data removed afterward.
 
 ## PHASE D — Timesheets (own build cycle)
 

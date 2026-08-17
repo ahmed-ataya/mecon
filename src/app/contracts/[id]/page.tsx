@@ -8,6 +8,7 @@ import {
 import {
   CONTRACT_STATUS_CLASSES,
   CONTRACT_STATUS_LABELS,
+  hasAssignmentEnded,
 } from '@/lib/contract-status'
 import { formatDate } from '@/lib/dates'
 import { SITE_LABELS, type Site } from '@/lib/enums'
@@ -41,6 +42,20 @@ export default async function ContractDetailPage({
   ])
 
   if (!contract) notFound()
+
+  // Phase B4/F5: the eligibility check both replacement flows show live
+  // needs to know about the OTHER half of the pairing — the current
+  // machine's type when replacing the operator, the current operator's
+  // certificates when replacing the machine. "One contract per machine"
+  // means there's normally exactly one live assignment on each side.
+  const currentMachineType =
+    contract.equipmentAssignments.find((a) => !hasAssignmentEnded(a))?.equipment
+      .type ?? null
+  const currentOperatorId = contract.operatorAssignments.find(
+    (a) => !hasAssignmentEnded(a),
+  )?.operator?.id
+  const currentOperator =
+    operatorOptions.find((o) => o.value === currentOperatorId) ?? null
 
   return (
     <div className="space-y-6">
@@ -156,11 +171,15 @@ export default async function ContractDetailPage({
       <EquipmentTimeline
         assignments={contract.equipmentAssignments}
         equipmentOptions={equipmentOptions}
+        siteRegime={contract.siteRegime}
+        currentOperator={currentOperator}
       />
 
       <OperatorTimeline
         assignments={contract.operatorAssignments}
         operatorOptions={operatorOptions}
+        siteRegime={contract.siteRegime}
+        currentMachineType={currentMachineType}
       />
     </div>
   )

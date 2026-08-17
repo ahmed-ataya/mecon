@@ -159,13 +159,24 @@ export function siteApprovalWarning(
 // Operator site eligibility — Phase B3
 // ---------------------------------------------------------------------------
 
-type OperatorCertificateLike = DocumentLike & { thirdPartyType: string | null }
+type OperatorCertificateLike = DocumentLike & {
+  thirdPartyType: string | null
+  certifiedEquipmentType: string | null
+}
+
+/** Trim + lowercase — the same free-text vocabulary as Equipment.type and
+ * OperatorQualification.equipmentType, compared the same forgiving way
+ * loadEquipmentTypeOptions already dedupes it. */
+function normalizeEquipmentType(value: string | null | undefined) {
+  return (value ?? '').trim().toLowerCase()
+}
 
 /**
  * QatarEnergy specifically requires the assigned operator to hold all three:
- * a valid TPC/QE 3rd party certificate (Assessment alone does not count — see
- * THIRD_PARTY_TYPES_BY_OWNER), a valid H2S Certificate, a valid Defensive
- * Driving Certificate.
+ * a valid TPC/QE 3rd party certificate FOR THE MACHINE TYPE BEING ASSIGNED
+ * (Assessment alone does not count — see THIRD_PARTY_TYPES_BY_OWNER; nor
+ * does a TPC/QE held for a different machine — Phase B4/F5), a valid H2S
+ * Certificate, a valid Defensive Driving Certificate.
  *
  * QatarEnergy ONLY — confirmed deliberately, not assumed. This is NOT the
  * same three-site list siteApprovalWarning uses (QatarEnergy, Ras Laffan,
@@ -175,11 +186,17 @@ type OperatorCertificateLike = DocumentLike & { thirdPartyType: string | null }
  *
  * One warning per unmet requirement rather than a single bundled one, so
  * whoever reads it sees exactly what is missing, not just that something is.
+ *
+ * `machineType` is the equipment type currently being assigned alongside
+ * this operator — null when that isn't known yet (e.g. the contract form
+ * before a machine has been picked), in which case the TPC/QE check falls
+ * back to "holds one for any machine" rather than guessing wrong.
  */
 export function operatorSiteEligibilityWarnings(
   operatorName: string,
   site: Site,
   documents: OperatorCertificateLike[],
+  machineType: string | null,
   siteName?: string,
 ): Warning[] {
   if (site !== 'QATAR_ENERGY') return []
@@ -194,18 +211,61 @@ export function operatorSiteEligibilityWarnings(
         matches(document),
     )
 
-  const checks: {
-    code: string
-    label: string
-    note?: string
-    matches: (d: OperatorCertificateLike) => boolean
-  }[] = [
-    {
-      code: 'OPERATOR_MISSING_TPC_QE',
-      label: 'TPC/QE 3rd party certificate',
-      note: ' An Assessment certificate is not sufficient.',
-      matches: (d) => d.documentType === THIRD_PARTY_CERTIFICATE && d.thirdPartyType === 'TPC/QE',
-    },
+  const warnings: Warning[] = []
+
+  // --- TPC/QE: machine-specific (Phase B4/F5) --------------------------
+  const isTpcQe = (d: OperatorCertificateLike) =>
+    d.documentType === THIRD_PARTY_CERTIFICATE && d.thirdPartyType === 'TPC/QE'
+  const matchesMachine = (d: OperatorCertificateLike) =>
+    machineType === null ||
+    normalizeEquipmentType(d.certifiedEquipmentType) === normalizeEquipmentType(machineType)
+
+  const heldTpcQe = documents.filter(isTpcQe)
+  const hasValidForMachine = heldTpcQe.some(
+    (d) =>
+      d.isApplicable && getDocumentStatus(d) !== 'EXPIRED' && matchesMachine(d),
+  )
+
+  if (!hasValidForMachine) {
+    const forThisMachine = heldTpcQe.filter(matchesMachine)
+
+    if (heldTpcQe.length === 0) {
+      warnings.push({
+        code: 'OPERATOR_MISSING_TPC_QE',
+        severity: 'RED',
+        message:
+          `${operatorName} has no TPC/QE 3rd party certificate on file, and ` +
+          `${where} requires one${machineType ? ` for ${machineType}` : ''}. ` +
+          'An Assessment certificate is not sufficient.',
+      })
+    } else if (forThisMachine.length > 0) {
+      // Holds one for this exact machine, but it's not currently valid —
+      // expired, almost always; matchesMachine ignores validity on purpose
+      // so this branch can tell that apart from "wrong machine" below.
+      warnings.push({
+        code: 'OPERATOR_TPC_QE_EXPIRED',
+        severity: 'RED',
+        message:
+          `${operatorName}'s TPC/QE 3rd party certificate for ${machineType} ` +
+          `is not currently valid, and ${where} requires one.`,
+      })
+    } else {
+      const heldFor = [
+        ...new Set(heldTpcQe.map((d) => d.certifiedEquipmentType).filter(Boolean)),
+      ].join(', ')
+      warnings.push({
+        code: 'OPERATOR_TPC_QE_WRONG_MACHINE',
+        severity: 'RED',
+        message:
+          `${operatorName} holds a TPC/QE 3rd party certificate for ` +
+          `${heldFor || 'a different machine type'}, not ${machineType}, and ` +
+          `${where} requires one for the machine being assigned.`,
+      })
+    }
+  }
+
+  // --- H2S / Defensive Driving: unchanged, machine-independent ---------
+  const otherChecks: { code: string; label: string; matches: (d: OperatorCertificateLike) => boolean }[] = [
     {
       code: 'OPERATOR_MISSING_H2S',
       label: 'H2S Certificate',
@@ -218,15 +278,17 @@ export function operatorSiteEligibilityWarnings(
     },
   ]
 
-  return checks
-    .filter((check) => !holds(check.matches))
-    .map((check) => ({
-      code: check.code,
-      severity: 'RED',
-      message:
-        `${operatorName} has no valid ${check.label} on file, and ${where} requires one.` +
-        (check.note ?? ''),
-    }))
+  warnings.push(
+    ...otherChecks
+      .filter((check) => !holds(check.matches))
+      .map((check) => ({
+        code: check.code,
+        severity: 'RED' as const,
+        message: `${operatorName} has no valid ${check.label} on file, and ${where} requires one.`,
+      })),
+  )
+
+  return warnings
 }
 
 // ---------------------------------------------------------------------------

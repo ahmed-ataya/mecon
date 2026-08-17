@@ -1,7 +1,8 @@
 # Deploying
 
-The app runs on Vercel with a Neon Postgres database. Both have free tiers that
-comfortably cover a review deployment.
+The app runs on Vercel with a Neon Postgres database and a Vercel Blob store
+for uploaded document files. All three have free tiers that comfortably cover
+a review deployment.
 
 You need to do the account steps yourself — they involve signing in and handling
 credentials.
@@ -34,6 +35,15 @@ Treat that string as a password. It grants full read/write to the database.
 
    Add both to **all** environments (Production, Preview, Development).
 4. Deploy.
+5. Add a Blob store for file uploads (Phase C): open the project → **Storage**
+   tab → **Create Database** → **Blob** → connect it to this project. Vercel
+   adds `BLOB_READ_WRITE_TOKEN` to the project's environment variables for
+   you — nothing to copy in by hand, unlike the two above. Redeploy if the
+   store was connected after the first deploy.
+
+   Leave it **Private** (the default, and the only option for new stores).
+   Document files are read through `/api/documents/[id]/file`, which holds
+   the token server-side — the app never needs a public store.
 
 Vercel runs the `vercel-build` script, which is
 `prisma generate && prisma migrate deploy && next build` — so the database
@@ -81,8 +91,14 @@ second free Neon database and use that as your dev database.
 Never point local development at the database the deployed site uses — the
 reset and seed scripts are destructive.
 
+Unlike Postgres, there's no local stand-in for Blob — `BLOB_READ_WRITE_TOKEN`
+has to point at a real store even for local dev. Create a second Blob store
+the same way (Storage tab → Create Database → Blob), on a project you don't
+deploy from, and copy its token in — otherwise local testing uploads end up
+sitting in the same store as real documents.
+
 ```bash
-cp .env.example .env      # then edit DATABASE_URL
+cp .env.example .env      # then edit DATABASE_URL and BLOB_READ_WRITE_TOKEN
 npm run db:migrate        # apply migrations
 npm run db:seed           # load sample data
 npm run dev

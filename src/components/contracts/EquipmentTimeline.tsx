@@ -12,7 +12,7 @@ import {
 } from '@/lib/enums'
 import { toRiyalInput } from '@/lib/money'
 import { describeRate } from '@/lib/rates'
-import type { EquipmentOption } from '@/lib/contract-options'
+import type { EquipmentOption, OperatorOption } from '@/lib/contract-options'
 import { replaceEquipment } from '@/lib/actions/contracts'
 import { Combobox } from '@/components/ui/Combobox'
 import { Select } from '@/components/ui/Select'
@@ -24,6 +24,7 @@ import {
   inputClass,
 } from '@/components/ui/form'
 import { RateFields } from './RateFields'
+import { WarningList } from './WarningList'
 
 export type EquipmentAssignmentRow = {
   id: string
@@ -47,9 +48,18 @@ export type EquipmentAssignmentRow = {
 export function EquipmentTimeline({
   assignments,
   equipmentOptions,
+  siteRegime,
+  currentOperator,
 }: {
   assignments: EquipmentAssignmentRow[]
   equipmentOptions: EquipmentOption[]
+  siteRegime: string
+  /** Whoever is currently assigned to operate on this contract, if anyone —
+   * Phase B4/F5: swapping the machine can invalidate their existing TPC/QE
+   * coverage (issued for a different machine type), so replacing equipment
+   * needs the same live eligibility check replacing the operator already
+   * gets, just checked against the machine instead of the person. */
+  currentOperator: OperatorOption | null
 }) {
   const [replacing, setReplacing] = useState<string | null>(null)
 
@@ -151,6 +161,8 @@ export function EquipmentTimeline({
                   <AssignmentForm
                     action={replaceEquipment.bind(null, assignment.id)}
                     equipmentOptions={equipmentOptions}
+                    siteRegime={siteRegime}
+                    currentOperator={currentOperator}
                     submitLabel="Replace machine"
                     defaultReason="BREAKDOWN_REPLACEMENT"
                     defaultRateType={assignment.rateType}
@@ -171,6 +183,8 @@ export function EquipmentTimeline({
 function AssignmentForm({
   action,
   equipmentOptions,
+  siteRegime,
+  currentOperator,
   submitLabel,
   defaultReason,
   defaultRateType,
@@ -183,6 +197,8 @@ function AssignmentForm({
     formData: FormData,
   ) => Promise<{ errors?: Record<string, string> }>
   equipmentOptions: EquipmentOption[]
+  siteRegime: string
+  currentOperator: OperatorOption | null
   submitLabel: string
   defaultReason: string
   defaultRateType?: string
@@ -193,6 +209,7 @@ function AssignmentForm({
   const [state, formAction, pending] = useActionState(action, {})
   const errors = state.errors ?? {}
   const [reason, setReason] = useState(defaultReason)
+  const [equipmentId, setEquipmentId] = useState('')
 
   // Close once the server reports success (no errors came back).
   const settled = useRef(state)
@@ -201,14 +218,28 @@ function AssignmentForm({
     settled.current = state
   }, [state, onDone])
 
+  const selectedMachine = equipmentOptions.find((e) => e.value === equipmentId)
+  // Phase B4/F5: the current operator's TPC/QE has to cover whichever
+  // machine ends up here, not the one being replaced. '' before a machine
+  // is picked falls back to "any machine" rather than guessing wrong.
+  const eligibilityWarnings =
+    currentOperator?.siteWarnings[siteRegime]?.[selectedMachine?.type ?? ''] ?? []
+
   return (
     <form action={formAction} className="space-y-4">
       <FormError message={errors.form} />
+
+      <WarningList
+        warnings={eligibilityWarnings}
+        title="Before you replace"
+        footer="These do not prevent replacing — resolve them separately."
+      />
 
       <Field label="New machine" htmlFor="equipmentId">
         <Combobox
           name="equipmentId"
           options={equipmentOptions}
+          onSelect={setEquipmentId}
           placeholder="Search equipment…"
         />
         {errors.equipmentId && (

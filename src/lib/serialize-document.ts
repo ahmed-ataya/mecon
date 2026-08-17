@@ -24,9 +24,15 @@ export function serializeDocument(
     status: getDocumentStatus(document),
     thirdPartyType: document.thirdPartyType,
     issuingCompany: document.issuingCompany,
+    certifiedEquipmentType: document.certifiedEquipmentType,
     approvedFor: document.approvedFor.map(
       (approval) => approval.body as ApprovalBody,
     ),
+    fileUrl: document.fileUrl,
+    fileName: document.fileName,
+    fileType: document.fileType,
+    otherLabel: document.otherLabel,
+    notes: document.notes,
   }
 }
 

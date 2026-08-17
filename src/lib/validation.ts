@@ -146,6 +146,18 @@ export const documentSchema = z
     thirdPartyType: optionalText,
     issuingCompany: optionalText,
     approvedFor: z.array(z.enum(APPROVAL_BODIES)),
+    // Set client-side once the file has finished uploading to Blob — see
+    // DocumentForm.tsx. Absent entirely on a save that doesn't touch the
+    // file (editing dates on a document that already has one attached).
+    fileUrl: optionalText,
+    fileName: optionalText,
+    fileType: optionalText,
+    // Phase B4/F1 — only meaningful when documentType is Other.
+    otherLabel: optionalText,
+    // Phase B4/F2 — every owner type, always optional.
+    notes: optionalText,
+    // Phase B4/F5 — only meaningful on an OPERATOR's 3rd party certificate.
+    certifiedEquipmentType: optionalText,
   })
   // The allowed document types differ per owner, so this pair has to be
   // checked together rather than field by field.
@@ -200,6 +212,53 @@ export const documentSchema = z
       path: ['approvedFor'],
     },
   )
+  // Other's name field, same shape as the 3rd party fields above: only
+  // meaningful for its own document type, required while applicable, a
+  // deliberate "doesn't apply" record is allowed to leave it blank.
+  .refine((data) => data.documentType === 'Other' || !data.otherLabel, {
+    message: 'Document name only applies when the type is Other',
+    path: ['otherLabel'],
+  })
+  .refine(
+    (data) =>
+      data.documentType !== 'Other' || !data.isApplicable || !!data.otherLabel,
+    {
+      message: 'Enter a name for this document',
+      path: ['otherLabel'],
+    },
+  )
+  // Machine type only means something on an OPERATOR's 3rd party
+  // certificate — equipment's own 3rd party certs already have their
+  // machine implicit in the owner.
+  .refine(
+    (data) =>
+      (data.ownerType === 'OPERATOR' &&
+        data.documentType === THIRD_PARTY_CERTIFICATE) ||
+      !data.certifiedEquipmentType,
+    {
+      message: 'Machine type only applies to an operator 3rd party certificate',
+      path: ['certifiedEquipmentType'],
+    },
+  )
+  .refine(
+    (data) =>
+      !(
+        data.ownerType === 'OPERATOR' &&
+        data.documentType === THIRD_PARTY_CERTIFICATE
+      ) ||
+      !data.isApplicable ||
+      !!data.certifiedEquipmentType,
+    {
+      message: 'Select which machine type this certificate covers',
+      path: ['certifiedEquipmentType'],
+    },
+  )
+  // Guards against a client bug that sends one without the other — a URL
+  // with no name to display, or a name pointing at nothing.
+  .refine((data) => Boolean(data.fileUrl) === Boolean(data.fileName), {
+    message: 'File upload did not complete — try attaching it again',
+    path: ['fileUrl'],
+  })
 
 export type DocumentInput = z.infer<typeof documentSchema>
 

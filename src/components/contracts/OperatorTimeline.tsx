@@ -14,7 +14,7 @@ import {
   type Arrangement,
 } from '@/lib/enums'
 import { formatQar, toRiyalInput } from '@/lib/money'
-import type { PartyOption } from '@/lib/contract-options'
+import type { OperatorOption } from '@/lib/contract-options'
 import { replaceOperator } from '@/lib/actions/contracts'
 import { Combobox } from '@/components/ui/Combobox'
 import { Select } from '@/components/ui/Select'
@@ -25,6 +25,7 @@ import {
   buttonSecondaryClass,
   inputClass,
 } from '@/components/ui/form'
+import { WarningList } from './WarningList'
 
 export type OperatorAssignmentRow = {
   id: string
@@ -45,9 +46,16 @@ export type OperatorAssignmentRow = {
 export function OperatorTimeline({
   assignments,
   operatorOptions,
+  siteRegime,
+  currentMachineType,
 }: {
   assignments: OperatorAssignmentRow[]
-  operatorOptions: PartyOption[]
+  operatorOptions: OperatorOption[]
+  siteRegime: string
+  /** The machine currently on this contract, if any — Phase B4/F5: TPC/QE
+   * coverage is per machine type, so eligibility for a replacement operator
+   * depends on which machine they'd actually be running. */
+  currentMachineType: string | null
 }) {
   const [replacing, setReplacing] = useState<string | null>(null)
 
@@ -158,6 +166,8 @@ export function OperatorTimeline({
                   <OperatorAssignmentForm
                     action={replaceOperator.bind(null, assignment.id)}
                     operatorOptions={operatorOptions}
+                    siteRegime={siteRegime}
+                    currentMachineType={currentMachineType}
                     defaultArrangement={assignment.arrangement as Arrangement}
                     defaultReason="SICK_INJURED"
                     defaultHourlyCost={assignment.operatorHourlyCost}
@@ -179,6 +189,8 @@ export function OperatorTimeline({
 function OperatorAssignmentForm({
   action,
   operatorOptions,
+  siteRegime,
+  currentMachineType,
   defaultArrangement,
   defaultReason,
   defaultHourlyCost,
@@ -190,7 +202,9 @@ function OperatorAssignmentForm({
     state: { errors?: Record<string, string> },
     formData: FormData,
   ) => Promise<{ errors?: Record<string, string> }>
-  operatorOptions: PartyOption[]
+  operatorOptions: OperatorOption[]
+  siteRegime: string
+  currentMachineType: string | null
   defaultArrangement: Arrangement
   defaultReason: string
   defaultHourlyCost: number | null
@@ -205,6 +219,7 @@ function OperatorAssignmentForm({
     defaultArrangement,
   )
   const [reason, setReason] = useState(defaultReason)
+  const [operatorId, setOperatorId] = useState('')
 
   const settled = useRef(state)
   useEffect(() => {
@@ -215,9 +230,20 @@ function OperatorAssignmentForm({
   const needsOperator = arrangement !== 'WITHOUT_OPERATOR'
   const isMarket = arrangement === 'MARKET_OPERATOR'
 
+  const selectedOperator = operatorOptions.find((o) => o.value === operatorId)
+  const eligibilityWarnings = needsOperator
+    ? (selectedOperator?.siteWarnings[siteRegime]?.[currentMachineType ?? ''] ?? [])
+    : []
+
   return (
     <form action={formAction} className="space-y-4">
       <FormError message={errors.form} />
+
+      <WarningList
+        warnings={eligibilityWarnings}
+        title="Before you replace"
+        footer="These do not prevent replacing — resolve them separately."
+      />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Arrangement" htmlFor="arrangement">
@@ -250,6 +276,7 @@ function OperatorAssignmentForm({
           <Combobox
             name="operatorId"
             options={operatorOptions}
+            onSelect={setOperatorId}
             placeholder="Search operators…"
           />
           {errors.operatorId && (

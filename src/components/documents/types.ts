@@ -23,5 +23,11 @@ export type DocumentWithApprovals = {
   status: DocumentStatus
   thirdPartyType: string | null
   issuingCompany: string | null
+  certifiedEquipmentType: string | null
   approvedFor: ApprovalBody[]
+  fileUrl: string | null
+  fileName: string | null
+  fileType: string | null
+  otherLabel: string | null
+  notes: string | null
 }

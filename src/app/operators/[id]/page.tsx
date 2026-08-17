@@ -2,12 +2,15 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { db } from '@/lib/db'
 import { rollUpStatus, summarizeStatuses } from '@/lib/document-status'
+import { computeCompleteness } from '@/lib/document-completeness'
 import { OPERATOR_SOURCE_LABELS, type OperatorSource } from '@/lib/enums'
+import { loadEquipmentTypeOptions } from '@/lib/equipment-options'
 import {
   serializeDocument,
   sortDocumentsByUrgency,
 } from '@/lib/serialize-document'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import { CompletenessCard } from '@/components/documents/CompletenessBar'
 import { DocumentsSection } from '@/components/documents/DocumentsSection'
 import { buttonSecondaryClass } from '@/components/ui/form'
 
@@ -18,13 +21,16 @@ export default async function OperatorDetailPage({
 }) {
   const { id } = await params
 
-  const operator = await db.employee.findUnique({
-    where: { id },
-    include: {
-      documents: { include: { approvedFor: true } },
-      qualifications: { orderBy: { equipmentType: 'asc' } },
-    },
-  })
+  const [operator, equipmentTypeOptions] = await Promise.all([
+    db.employee.findUnique({
+      where: { id },
+      include: {
+        documents: { include: { approvedFor: true } },
+        qualifications: { orderBy: { equipmentType: 'asc' } },
+      },
+    }),
+    loadEquipmentTypeOptions(),
+  ])
 
   // Employee now holds every workforce category (Phase E0) — this page is
   // specifically the operator view, so a non-operator id is a 404 here, not
@@ -35,6 +41,11 @@ export default async function OperatorDetailPage({
   const { expired, expiringSoon } = summarizeStatuses(operator.documents)
   const documents = sortDocumentsByUrgency(
     operator.documents.map(serializeDocument),
+  )
+  const completeness = computeCompleteness(
+    'OPERATOR',
+    operator.documents,
+    operator.qualifications.map((q) => q.equipmentType),
   )
   const sourceLabel =
     OPERATOR_SOURCE_LABELS[operator.source as OperatorSource] ?? operator.source
@@ -128,10 +139,13 @@ export default async function OperatorDetailPage({
         </dl>
       </section>
 
+      <CompletenessCard completeness={completeness} />
+
       <DocumentsSection
         ownerType="OPERATOR"
         ownerId={operator.id}
         documents={documents}
+        equipmentTypeOptions={equipmentTypeOptions}
       />
     </div>
   )

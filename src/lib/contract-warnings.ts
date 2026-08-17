@@ -38,14 +38,17 @@ export type ContractForWarnings = {
   equipmentAssignments: {
     startDate: Date
     endDate: Date | null
-    equipment: { name: string; documents: CertificateLike[] }
+    equipment: { name: string; type: string; documents: CertificateLike[] }
   }[]
   operatorAssignments: {
     startDate: Date
     endDate: Date | null
     operator: {
       name: string
-      documents: (DocumentLike & { thirdPartyType: string | null })[]
+      documents: (DocumentLike & {
+        thirdPartyType: string | null
+        certifiedEquipmentType: string | null
+      })[]
     } | null
   }[]
 }
@@ -86,6 +89,15 @@ export function getContractWarnings(
     if (clash) warnings.push(clash)
   }
 
+  // The machine currently on this contract — "one contract per machine"
+  // (see the Contract model) means there's normally exactly one live
+  // equipment assignment. Null only in the brief gap of a swap in progress,
+  // or when the arrangement has no machine at all; the eligibility check
+  // falls back to "any machine" rather than guessing wrong in that case.
+  const currentMachineType =
+    contract.equipmentAssignments.find((a) => !hasAssignmentEnded(a))?.equipment
+      .type ?? null
+
   for (const assignment of contract.operatorAssignments) {
     if (hasAssignmentEnded(assignment)) continue
     if (!assignment.operator) continue
@@ -99,6 +111,7 @@ export function getContractWarnings(
         operator.name,
         contract.siteRegime as Site,
         operator.documents,
+        currentMachineType,
         contract.siteName,
       ),
     )

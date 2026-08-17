@@ -194,6 +194,29 @@ export const THIRD_PARTY_TYPES_BY_OWNER: Record<OwnerType, readonly string[]> = 
 
 export type ThirdPartyType = (typeof EQUIPMENT_THIRD_PARTY_TYPES)[number]
 
+/**
+ * Phase C — what a document's attached file is allowed to be. Read by the
+ * upload route handler (server-side token constraint, the actual gate) and by
+ * the file input's `accept` attribute (a UI hint only — the browser dialog
+ * filters what's shown but never blocks a determined user, so it does no
+ * security work).
+ *
+ * Scans of certificates and phone photos of the physical document — the two
+ * things staff actually attach here — never need more than 20MB.
+ */
+export const DOCUMENT_FILE_ALLOWED_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+] as const
+
+export const DOCUMENT_FILE_ACCEPT = DOCUMENT_FILE_ALLOWED_TYPES.join(',')
+
+export const DOCUMENT_FILE_MAX_BYTES = 20 * 1024 * 1024
+
 // --- Sites and approval bodies -------------------------------------------
 
 export const APPROVAL_BODIES = [

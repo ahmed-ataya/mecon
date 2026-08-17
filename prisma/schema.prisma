@@ -113,6 +113,12 @@ model Employee {
   phone       String?
   nationality String?
 
+  /// Phase B4/F3. The BUSINESS's own employee number, distinct from `id`
+  /// (an internal system key nobody in the office would recognise). Schema
+  /// only for now, added ahead of need — no UI reads or writes it yet.
+  /// Surfaced when Phase E (HR) is built, per the user, deliberately.
+  employeeNumber String?
+
   /// OPERATOR | DRIVER | MECHANIC_WORKSHOP | HELPER_LABOURER | ADMIN_OFFICE
   /// | MANAGEMENT
   ///
@@ -197,14 +203,55 @@ model Document {
   /// blank is never ambiguous between "missing" and "not required".
   isApplicable Boolean @default(true)
 
-  /// Relative path under storage/ — populated in phase 4
-  filePath String?
+  /// Phase B4/F1. Required whenever documentType is Other and the record is
+  /// applicable — otherwise every Other document is indistinguishable from
+  /// every other one. Optional when not applicable, same escape hatch the
+  /// 3rd party fields already use for a deliberate "doesn't apply" record.
+  otherLabel String?
+
+  /// Phase B4/F2. Free text, every owner type, always optional — staff
+  /// sometimes have something to say about a document that doesn't fit any
+  /// other field.
+  notes String?
+
+  /// Vercel Blob URL — Phase C. The store is private (Vercel no longer
+  /// offers public stores for new accounts, and a real access check beats
+  /// an unguessable-URL model anyway), so this URL alone is useless without
+  /// BLOB_READ_WRITE_TOKEN — nothing can read it directly. The browser never
+  /// sees it: reads go through /api/documents/[id]/file, which holds the
+  /// token server-side and is gated the same as everything else in the app,
+  /// by the review-gate password (src/middleware.ts).
+  /// Replaced the earlier `filePath`, which was never actually used —
+  /// written for local storage/ (see .gitignore) before that was abandoned
+  /// for the same "serverless has no persistent filesystem" reason SQLite was.
+  fileUrl String?
+
+  /// Original filename as uploaded — the Blob URL is a generated path, not
+  /// something a person should have to read to know what the file is.
+  fileName String?
+
+  /// MIME type, so the document list can offer "View" for something the
+  /// browser renders natively (PDF, image) vs "Download" for anything else.
+  fileType String?
 
   // --- 3rd Party Certificate only -----------------------------------------
 
   /// Lifting Equipment Cert | Load Test | Operator Competency
   /// | Vehicle Inspection | Pressure Vessel | Other
   thirdPartyType String?
+
+  /// Phase B4/F5. OPERATOR owner only — which equipment type this specific
+  /// certificate covers (Assessment and TPC/QE both). An operator running a
+  /// skid loader and a wheel loader holds two separate 3rd party
+  /// certificate records, one per machine; multiple rows per operator
+  /// already worked at the DB level (Phase B1), this is what makes that
+  /// multiplicity mean something instead of being ambiguous. Free text,
+  /// same vocabulary as Equipment.type and OperatorQualification.equipmentType
+  /// — not an enum, for the same "fleet isn't a closed set" reason those
+  /// aren't either. Required whenever applicable; not used on EQUIPMENT-owned
+  /// 3rd party certificates, where the machine is already implicit in the
+  /// owner.
+  certifiedEquipmentType String?
 
   /// The certifying body, e.g. Bureau Veritas, SGS, TÜV
   issuingCompany String?
