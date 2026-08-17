@@ -12,7 +12,7 @@ import { NextResponse, type NextRequest } from 'next/server'
  * Set SITE_PASSWORD in the environment to enable it. If the variable is unset
  * the gate is skipped entirely, which keeps local development friction-free.
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const password = process.env.SITE_PASSWORD
 
   if (!password) return NextResponse.next()
