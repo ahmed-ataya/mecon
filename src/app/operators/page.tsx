@@ -28,6 +28,8 @@ export default async function OperatorsPage({
               { name: { contains: query, mode: 'insensitive' } },
               { phone: { contains: query, mode: 'insensitive' } },
               { nationality: { contains: query, mode: 'insensitive' } },
+              { employeeNumber: { contains: query, mode: 'insensitive' } },
+              { jobTitle: { contains: query, mode: 'insensitive' } },
             ],
           }
         : {}),
@@ -51,7 +53,7 @@ export default async function OperatorsPage({
         </Link>
       </div>
 
-      <SearchInput placeholder="Search by name, phone or nationality…" />
+      <SearchInput placeholder="Search by name, staff no., job title, phone or nationality…" />
 
       {operators.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
@@ -67,6 +69,7 @@ export default async function OperatorsPage({
             <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3 font-medium">Operator</th>
+                <th className="px-4 py-3 font-medium">Job title</th>
                 <th className="px-4 py-3 font-medium">Source</th>
                 <th className="px-4 py-3 font-medium">Phone</th>
                 <th className="px-4 py-3 font-medium">Documents</th>
@@ -94,6 +97,14 @@ export default async function OperatorsPage({
                       >
                         {operator.name}
                       </Link>
+                      {operator.employeeNumber && (
+                        <div className="text-xs text-slate-500">
+                          #{operator.employeeNumber}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {operator.jobTitle ?? '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-600">
                       {OPERATOR_SOURCE_LABELS[

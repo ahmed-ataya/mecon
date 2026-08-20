@@ -276,56 +276,123 @@ building, same as every other phase. Migration
   certificate with a file for Skid Loader correctly dropped only that one
   from the list. Test data removed afterward.
 
-## PHASE D — Timesheets (own build cycle)
+## PHASE D — Timesheets (own build cycle) ✅ Done
 
-Not started. **User has real timesheet examples to share when this starts** —
-same approach as the invoice work (built and verified against real invoices
-photographed and pasted in, not assumed). Ask before beginning.
+Building 2026-08-18. Reviewed against three real timesheets the user
+provided (not assumed) — same approach as the invoice work: an L&T Skid
+Steer Loader log sheet, an Al-Mohannadi Monthly Equipment Timesheet, and a
+Mecon-branded driver timesheet for a McDermott offshore job. Corrected the
+spec below against what those actually showed, in two places:
+
+- **Idle/standby hours, dropped.** The original spec (below, kept for
+  record) called for Working / Idle / Breakdown as three buckets. None of
+  the three real sheets track idle time separately — only Working,
+  Breakdown (present on two of three), and free-text Remarks. Building the
+  field nobody fills in was the wrong call.
+- **Overtime threshold, corrected.** The Mecon-branded sample's own
+  "REGULAR (HRS)" column tracks the first 10 hours as regular, with
+  overtime only counted past 10 — that's how that document *displays* it,
+  not the rule the business actually pays by. Confirmed directly: 0–8h is
+  regular rate, 8–10h is 125%, under 8h is paid at actual hours with no
+  overtime, and anything past 10h is flagged rather than silently paid
+  (statutory OT cap is 2h/day except emergencies — see E3's overtime rules,
+  which this reuses).
 
 **The core fact driving this module**: the billable amount is not the
 machine rate alone — it's the machine rate applied against operator-
 submitted, client-signed timesheets. The signature is what makes a sheet
 billable.
 
-**Two separate timesheets, never derived from each other**:
+**Two separate timesheets, never derived from each other** — confirmed
+explicitly, not inferred:
 - Equipment timesheet → drives invoicing.
 - Operator timesheet → drives payroll.
-- Usually the same numbers, sometimes not. Must be separate records.
+- Usually the same numbers, sometimes not. Must be separate records, two
+  separate Prisma models, two separate calculations. Neither one's hours
+  are ever computed from the other's.
 
 **Header** (every timesheet): reference number (auto, sequential),
 month/period, customer, project + site, contract ref + LPO number, equipment
 (unit name, type, plate/serial), operator (name, ID), company logo.
 
-**Daily rows**, one per calendar day, auto-generated: Date, Day, Start,
-Finish, Working hrs, Idle/standby hrs, Breakdown hrs, Remarks. Distinguishing
-working from idle from breakdown matters — breakdown is typically not
-billable, and a signed sheet showing that is what prevents disputes.
+**Daily rows**, one per calendar day, auto-generated: Date, Start, Finish,
+Working hrs, Breakdown hrs, Remarks. `workingHours` is entered directly
+rather than computed from Start/Finish — the real sheets don't always
+subtract cleanly (overnight shifts, unstated breaks folded into the number),
+so the figure people actually sign against is whatever they wrote, not
+whatever the clock math says. Start/Finish are reference text, not used in
+any calculation.
 
 **Auto-fill defaults** (all editable; the entered value is what's stored and
 used downstream — never the default):
 - Equipment sheet: 10 hrs/working day, 0 on Friday.
-- Operator sheet: 10 hrs/day when assigned to equipment, 8 hrs/day when not,
-  0 on Friday.
+- Operator sheet: 10 hrs/day when assigned to equipment, 0 on Friday. (The
+  "8 hrs when not assigned to equipment" case from the original spec
+  doesn't apply to this build — see scope note below.)
 - Vacation days show as 0, marked distinctly as vacation — not absence, not
-  unworked.
+  unworked. **Deferred**: needs Phase E2 (leave management), not built yet.
+  Every day defaults to Working for now.
 
-**Footer**: total working/idle/breakdown hours. Signature blocks: operator,
-client site representative, company representative. Date signed.
+**Footer**: total working/breakdown/regular/overtime hours as applicable.
+Signature blocks: operator, client site representative, company
+representative. Date signed.
+
+**Scope drawn for this build**: both timesheet types link to a specific
+`EquipmentAssignment` / `OperatorAssignment` — same reasoning the
+assignment models already use for `deliveryNoteNumber` (a replacement
+machine needs its own delivery note; a replacement operator needs their own
+timesheet history). This matches all three real examples, which are every
+one of them tied to one contract and one machine/operator pairing. It does
+**not** cover general workforce attendance for employees who aren't
+currently on a contract (admin, mechanics, an operator between jobs) — that
+'s a broader E-phase concern for whenever full-workforce payroll is built,
+not what these three documents are.
 
 **Downstream rules — these produce two different numbers**:
 - Invoicing reads the *equipment* timesheet, applies the contractual
   10hr/day minimum. Site worked 8 → invoice still reads 10.
-- Payroll reads the *operator* timesheet at actual hours. Worked 8 → paid 8.
-  No automatic overtime. Payroll never inherits the billed figure.
-- Build both to read hours from one defined source each — exactly the
-  pattern already in place for invoicing
-  ([`src/lib/hours.ts`](src/lib/hours.ts)'s `hoursFor()`, currently an
-  estimate). When real timesheet data arrives, only that source's body
-  changes; invoice and payroll logic don't get rewritten. Payroll needs the
-  equivalent single-source treatment when it's built.
+- Payroll reads the *operator* timesheet at actual hours, split by the
+  overtime rule above. Worked 8 → paid 8, all regular. No automatic
+  overtime beyond what the rule computes. Payroll never inherits the
+  billed figure.
+- Regular/overtime split is **computed, not stored** — same "one source of
+  truth" pattern as `getDocumentStatus` and profile completeness elsewhere
+  in this app. `workingHours` is the only number actually saved per day;
+  the split is derived from it every time it's read, so it can never drift
+  out of step with an edited hour figure.
+- `src/lib/hours.ts`'s `hoursFor()` (currently an ESTIMATE) is meant to
+  start reading real equipment timesheet data once this exists — that
+  swap, and the equivalent for payroll, is **not** part of this build.
+  Timesheets and their own PDF/export come first; wiring billing.ts and a
+  future payroll engine to actually consume them is a follow-up step once
+  this is verified working. Building that wiring now would mean guessing
+  at Phase E3's shape before it exists.
 
-**Output**: export to PDF for client signature, export to spreadsheet, mark
-Signed/Approved before it can be invoiced against.
+**Output**: export to PDF for client signature (browser print page, same
+pattern as the invoice print page — no PDF library), export to spreadsheet
+(plain CSV, Excel opens it natively — same "use what the platform gives
+you" reasoning), mark Signed/Approved before it can be invoiced against.
+
+**Shipped**: 4 models (`EquipmentTimesheet`/`Day`,
+`OperatorTimesheet`/`Day`), reference numbering (`ET-0001`, `OT-0001`,
+separately sequenced), a cascading contract → assignment → month picker for
+creating either type, one bulk-editable daily-rows table shared by both
+(`showOvertimeSplit` is the only thing that differs), sign/unsign with the
+table locking while signed, print pages, and CSV export. Nav link added.
+
+Verified against real data on the Lusail Boulevard contract, not synthetic
+rows: created an equipment timesheet for Boom Truck 6x4 #2, confirmed day
+generation correctly clamped to the assignment's actual start date (08 Aug,
+not the 1st) and defaulted 10hrs/0 on Friday (21 working days × 10 = 210).
+Edited an hour figure and a remark, saved, reloaded, confirmed persistence.
+Signed it, confirmed the table actually disables rather than just hiding
+the save button; unsigned, confirmed it re-enables. Created an operator
+timesheet for Rajesh Kumar and hand-verified the overtime split against
+three deliberately different day types — 9h (8 regular + 1 OT), 13h (8
+regular + 2 OT, correctly capped, and the one day that triggered the
+"over 10h" flag banner), 6h (6 regular + 0 OT, no overtime under 8h) — the
+totals row summed correctly across all 30 days. Print and CSV export
+checked for both types. Test data deleted afterward.
 
 ## PHASE E — HR and payroll foundation
 
@@ -391,11 +458,16 @@ operate (multi-select), links to E1 certification documents.
 Keep assignment links intact. Report anything that fails to map — same
 "report, don't guess" pattern as A1's document type migration.
 
-### E1 — Employee documents and certifications
+### E1 — Employee documents and certifications ✅ Done
 
-Reuses the existing document-with-expiry pattern and alerting (same as
-customer/equipment). Every type below needs expiry tracking, file upload
-(Phase C), and the same warning behaviour.
+Built 2026-08-18. Reuses the existing document-with-expiry pattern and
+alerting (same as customer/equipment) — turned out to be a small change,
+because almost every type below already existed from earlier phases. The
+only two genuinely missing were `Visa/Residence Permit` and `Employment
+Contract`, added to `OPERATOR_DOCUMENT_TYPES` in `src/lib/enums.ts`. 3rd
+Party Certificate — Assessment/TPC/QE was never two separate document
+*types* — it's one type (`3rd Party Certificate`) with a `thirdPartyType`
+sub-field, already built in Phase B1.
 
 *Legal and identity — compliance-critical, an expiry here can stop a man
 working*: Qatar ID (QID), Passport, Visa/Residence Permit, Employment
@@ -407,7 +479,47 @@ Defensive Driving Certificate, Gate Pass (project-specific), Other.
 Rules: Assessment and TPC/QE are separate records (one, both, or neither).
 H2S and Defensive Driving separate, never combined. **QID and Visa expiry
 escalate harder than other documents** — an expired QID is a legal exposure,
-not an administrative one.
+not an administrative one. Built as a wider "expiring soon" window — 60
+days instead of the standard 30 — for just those two types
+(`EXTENDED_ESCALATION_TYPES` in `src/lib/document-status.ts`); everything
+else keeps the 30-day window. This was a judgment call, not a spec — the
+roadmap said "escalate harder" without saying how; flagged to the user, no
+objection.
+
+Verified live: added a Visa/Residence Permit document expiring 45 days out
+— correctly showed "Expiring soon" (45 ≤ 60), which would have shown
+"Valid" under the old 30-day rule that still applies to every other type.
+Confirmed the new types appear in the Add Document dropdown, and that
+profile completeness on an operator with 3 documents on file correctly
+recalculated from "0 of 9" to "0 of 11" with both new types listed under
+"still missing." Fixed a copy bug this surfaced: the operator detail
+page's summary banner hardcoded "expiring within 30 days," which is no
+longer always true — changed to "expiring soon." Customer and equipment
+pages keep the literal 30-day wording since the extended window never
+applies to them. Test document removed afterward.
+
+**Real staff list imported, 2026-08-20.** The user supplied the actual 50-
+person roster ("Employe List.xlsx" — staff number, name, job title).
+Added `Employee.jobTitle` (free text — the literal title, e.g. "WELDER",
+"CAMP BOSS"; `category` stays the coarse bucket the app's logic branches
+on, several distinct titles share one category) via
+`scripts/import-employees.ts`, a one-off, re-runnable, not a standing
+feature. `employeeNumber` and `jobTitle` are now shown and editable
+wherever an operator already is — form, detail page, list page (list is
+now also searchable by staff number and job title).
+
+None of the 50 real names matched the pre-existing demo employees
+(Mohammed Ashraf, Rajesh Kumar, Sunil Prasad — all tied to real contract/
+invoice/timesheet history built up over this session) — left completely
+untouched. 27 of the 50 are Operator category and now visible in
+`/operators`; the other 23 (drivers, mechanics/workshop, admin/office,
+management) are correctly categorized in the database but have no UI to
+appear in yet — that's the broader HR staff-list work this roadmap has
+always scoped as later, not part of E1.
+
+Category mapping involved a few judgment calls on ambiguous titles (CAMP
+BOSS → Management, WS OFFICE BOY → Mechanic/Workshop) — see the script's
+header comment for the full list; flag any that read wrong.
 
 ### E2 — Leave management
 
@@ -440,7 +552,34 @@ leave, not absence/unworked). **Unpaid leave is excluded from continuous
 service for gratuity purposes; paid annual leave is included** — this
 distinction must be stored correctly or gratuity comes out wrong.
 
-### E3 — Payroll
+### E3 — Payroll ✅ Done (WPS export deferred — see below)
+
+Building 2026-08-18, right after Phase D (timesheets) landed, so payroll has
+real hours to read from.
+
+**Scope decisions made before building**:
+- **WPS/SIF export deferred**, confirmed with the user — the format is
+  bank-specific and building it blind risks the bank rejecting the file.
+  Everything else (salary structure, minimum wage validation, overtime,
+  payslips, payroll register) is built and fully testable without it.
+- **Hourly/daily rate = basic ÷ 30 ÷ 8** — the same 30-day divisor E4's
+  gratuity formula already uses below, kept consistent rather than
+  introducing a second convention.
+- **Whole-workforce coverage, not just contract operators** — the entire
+  reason Employee was unified into one table (E0) was that mechanics,
+  admin and drivers need payroll despite never appearing on a contract. An
+  operator with a **signed** OperatorTimesheet for the period reads real
+  hours from it; every other employee gets an editable estimate (standard
+  hours for the month) — the same "estimate now, precise later, always
+  labelled which" pattern `hoursFor()` and the timesheets themselves
+  already use.
+- **Ramadan is a plain date-range setting**, entered by staff, not
+  hardcoded — moon-sighting dates aren't something to guess at.
+- **Deductions are a flat amount + note per payslip**, not a full loan/
+  advance ledger with balances and repayment schedules — nobody's asked
+  for that yet.
+- **Leave pay and gratuity are out of scope** — both need Phase E2/E4,
+  neither exists yet. Flagged here so it's a known gap, not a silent one.
 
 **Salary structure per employee**: basic, allowances (housing, transport,
 food, site, other), recurring deductions (advances, loans, fines).
@@ -492,6 +631,38 @@ File (SIF) in the bank's required format.
   has a valid QID/Visa ID and valid IBAN before generating the file. Block
   the export with a clear list of what's missing, rather than producing a
   file the bank will reject.
+- **Deferred** — not part of this build. Everything above it in this
+  section shipped.
+
+**Shipped**: Employee salary/bank fields (schema), minimum-wage validation
+with a live warning on the employee form, `RamadanPeriod` settings UI,
+`src/lib/payroll.ts` (the calculation engine — `computePayslip`,
+`standardHoursForMonth`, `checkMinimumWage`), a payroll period create flow
+that generates one payslip per employee with a basic salary set (skipping,
+never zero-filling, everyone else), a payslip edit view with a live
+breakdown (basic → shortfall → overtime → allowances → gross → deductions
+→ net, computed client-side with the exact same function the server uses
+to persist), finalize/unfinalize locking, print page, and a payroll
+register CSV export. `/payroll/[id]` shows how many payslips are on an
+estimate vs. real timesheet data.
+
+Verified against real data, not synthetic: gave Rajesh Kumar a real salary
+(QAR 3,000 basic + allowances) and a signed August 2026 operator timesheet
+(30 days, unedited defaults — confirmed 260 total hours by hand first).
+Generated an August payroll period and hand-verified every figure on the
+resulting payslip against the formula before trusting the screen: standard
+month = 216 hrs (27 working days × 8, no Ramadan period covering August),
+actual regular/OT from the signed timesheet = 208/52 (26 days × 8, 26 × 2 —
+the assignment starts Aug 2, one working day short of the full month),
+shortfall = 8 hrs × QAR 12.5/hr = QAR 100, overtime = 52 hrs × QAR 12.5 ×
+125% = QAR 812.50, basic pay = 3,000 − 100 + 812.50 = QAR 3,712.50, gross
+with allowances = QAR 4,862.50. The app produced exactly that number.
+Confirmed every OTHER employee (no basic salary set) was correctly skipped,
+not zero-filled — only 1 payslip generated. Added a QAR 200 deduction,
+confirmed the live breakdown and the saved database row matched exactly.
+Finalized the period, confirmed the payslip's hour/deduction inputs
+actually disabled (not just the save button hidden). Checked the print
+page and CSV register export. Test data removed afterward.
 
 ### E4 — End of service gratuity
 
@@ -537,17 +708,30 @@ if it coincides with planned annual leave.
 
 ### Open questions — need answers before building the relevant piece
 
-1. Do they employ any Qatari nationals? Determines whether GRSIA pension
-   contributions are needed (E6).
-2. Which bank for WPS? The SIF format spec must come from that bank (E3).
+1. *(Resolved 2026-08-18)* ~~Do they employ any Qatari nationals?~~
+   **Answered: no. GRSIA pension is confirmed out of scope for E6, whenever
+   that's revisited.**
+2. Which bank for WPS? The SIF format spec must come from that bank (E3) —
+   still open, user will provide once known. Everything else in E3 is built
+   and working; only the bank-specific export file itself is waiting on
+   this answer.
 3. Do they pay above statutory minimums anywhere — gratuity above 21 days,
    annual leave above 3 weeks? System should default to statutory, allow
-   per-employee override (E4, E2).
-4. How are the 2 hours beyond the standard 8-hour day currently paid for
-   operators — flat, or at overtime rate? (E3 — compliance-relevant.)
+   per-employee override (E4, E2). Still open — user needs to ask the
+   client.
+4. *(Resolved 2026-08-18)* ~~How are the 2 hours beyond the standard 8-hour
+   day currently paid for operators — flat, or at overtime rate?~~
+   **Answered: 125% (statutory minimum) — confirmed directly, and built into
+   `src/lib/overtime.ts`/`src/lib/payroll.ts` exactly as stated: 0-8h
+   regular, 8-10h at 125%, under 8h paid actual with no overtime, over 10h
+   flagged rather than auto-paid.**
 5. Air ticket entitlement cycle — every 1 year or 2, ticket or cash? (E5.)
-6. Is accommodation/food provided in kind or paid as allowance? Affects
-   minimum wage compliance checking (E3).
+   Still open — user needs to ask the business.
+6. Is accommodation/food provided in kind or paid as allowance? Not
+   answered — E3 defaults to NOT in kind (the stricter minimum-wage check)
+   per employee, overridable via the "provided in kind" checkboxes on the
+   employee form. User may be able to get this from employee contract
+   paperwork rather than asking outright — still open.
 7. *(Carried from the original Phase B doc, now resolved)* ~~H2S and
    Defensive Driving — one certificate or two?~~ **Answered: two separate
    records.**

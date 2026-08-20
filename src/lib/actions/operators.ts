@@ -18,10 +18,22 @@ export type OperatorFormValues = ReturnType<typeof readOperatorForm> & {
 function readOperatorForm(formData: FormData) {
   return {
     name: String(formData.get('name') ?? ''),
+    employeeNumber: String(formData.get('employeeNumber') ?? ''),
+    jobTitle: String(formData.get('jobTitle') ?? ''),
     phone: String(formData.get('phone') ?? ''),
     nationality: String(formData.get('nationality') ?? ''),
     source: String(formData.get('source') ?? ''),
     notes: String(formData.get('notes') ?? ''),
+    basicSalary: String(formData.get('basicSalary') ?? ''),
+    housingAllowance: String(formData.get('housingAllowance') ?? ''),
+    transportAllowance: String(formData.get('transportAllowance') ?? ''),
+    foodAllowance: String(formData.get('foodAllowance') ?? ''),
+    siteAllowance: String(formData.get('siteAllowance') ?? ''),
+    otherAllowance: String(formData.get('otherAllowance') ?? ''),
+    housingProvidedInKind: formData.get('housingProvidedInKind') !== null,
+    foodProvidedInKind: formData.get('foodProvidedInKind') !== null,
+    bankName: String(formData.get('bankName') ?? ''),
+    bankAccountNumber: String(formData.get('bankAccountNumber') ?? ''),
   }
 }
 

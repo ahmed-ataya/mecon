@@ -69,6 +69,7 @@ export default async function OperatorDetailPage({
               <StatusBadge status={status} />
             </div>
             <p className="mt-1 text-sm text-slate-500">
+              {operator.jobTitle && `${operator.jobTitle} · `}
               {sourceLabel}
               {operator.nationality && ` · ${operator.nationality}`}
             </p>
@@ -102,7 +103,7 @@ export default async function OperatorDetailPage({
           {expiringSoon > 0 && (
             <p className={expired > 0 ? 'mt-1' : undefined}>
               {expiringSoon} document{expiringSoon === 1 ? '' : 's'} expiring
-              within 30 days.
+              soon.
             </p>
           )}
         </div>
@@ -111,6 +112,8 @@ export default async function OperatorDetailPage({
       <section className="rounded-lg border border-slate-200 bg-white p-6">
         <h2 className="mb-4 font-semibold">Details</h2>
         <dl className="grid gap-4 text-sm sm:grid-cols-2">
+          <Detail label="Employee number" value={operator.employeeNumber} />
+          <Detail label="Job title" value={operator.jobTitle} />
           <Detail label="Source" value={sourceLabel} />
           <Detail label="Phone" value={operator.phone} />
           <Detail label="Nationality" value={operator.nationality} />

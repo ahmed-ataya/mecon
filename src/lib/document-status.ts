@@ -9,6 +9,15 @@ import { daysUntil } from './dates'
 
 export const EXPIRING_SOON_DAYS = 30
 
+/**
+ * Phase E1 — QID and Visa/Residence Permit escalate harder than every other
+ * document type: losing either means someone can legally not work, and
+ * renewal isn't instant, so staff need more runway than the usual 30 days
+ * to act. Everything else keeps the standard window.
+ */
+export const EXTENDED_ESCALATION_TYPES = ['Qatar ID', 'Visa/Residence Permit']
+export const EXTENDED_ESCALATION_DAYS = 60
+
 export type DocumentStatus =
   | 'NOT_APPLICABLE' // deliberately recorded as not required
   | 'NO_EXPIRY' // permanent document, nothing to track
@@ -17,6 +26,7 @@ export type DocumentStatus =
   | 'EXPIRED'
 
 type DocumentLike = {
+  documentType: string
   isApplicable: boolean
   expiryDate: Date | null
 }
@@ -26,9 +36,12 @@ export function getDocumentStatus(document: DocumentLike): DocumentStatus {
   if (!document.expiryDate) return 'NO_EXPIRY'
 
   const days = daysUntil(document.expiryDate)
+  const window = EXTENDED_ESCALATION_TYPES.includes(document.documentType)
+    ? EXTENDED_ESCALATION_DAYS
+    : EXPIRING_SOON_DAYS
 
   if (days < 0) return 'EXPIRED'
-  if (days <= EXPIRING_SOON_DAYS) return 'EXPIRING_SOON'
+  if (days <= window) return 'EXPIRING_SOON'
   return 'VALID'
 }
 

@@ -113,19 +113,30 @@ model Employee {
   phone       String?
   nationality String?
 
-  /// Phase B4/F3. The BUSINESS's own employee number, distinct from `id`
-  /// (an internal system key nobody in the office would recognise). Schema
-  /// only for now, added ahead of need — no UI reads or writes it yet.
-  /// Surfaced when Phase E (HR) is built, per the user, deliberately.
+  /// Phase B4/F3, surfaced in the UI Phase E1+ (2026-08-18) once the real
+  /// staff list existed to put in it. The BUSINESS's own employee number,
+  /// distinct from `id` (an internal system key nobody in the office would
+  /// recognise).
   employeeNumber String?
+
+  /// Literal job title as the business records it ("WELDER", "CAMP BOSS",
+  /// "BACKHOE LOADER") — free text, not derived from `category`. category
+  /// is the coarse bucket the app's logic branches on; this is what's
+  /// actually printed on a payslip or shown on a staff list, and multiple
+  /// distinct titles (WELDER, PAINTER, MECHANIC) can share one category.
+  jobTitle String?
 
   /// OPERATOR | DRIVER | MECHANIC_WORKSHOP | HELPER_LABOURER | ADMIN_OFFICE
   /// | MANAGEMENT
   ///
-  /// Every existing and currently-creatable row is OPERATOR — nothing in the
-  /// app exposes the other five yet, and the /operators UI still only ever
-  /// reads and writes category = OPERATOR. They exist here so Phase E's
-  /// later work (E1+) has the right column to build on, not to be used yet.
+  /// The real staff list (50 people, imported 2026-08-18) populates every
+  /// category, but the /operators UI still only ever reads and writes
+  /// category = OPERATOR — the other five have no UI yet, only real data
+  /// waiting for it. See scripts/import-employees.ts (one-off, not a
+  /// standing app feature) for the DESIGNATION → category mapping, which
+  /// involved judgment calls on a few ambiguous titles (CAMP BOSS →
+  /// MANAGEMENT, WS OFFICE BOY → MECHANIC_WORKSHOP) — confirm with the
+  /// business if any read wrong.
   category String @default("OPERATOR")
 
   /// IN_HOUSE | MARKET
@@ -133,9 +144,35 @@ model Employee {
 
   notes String?
 
+  // --- Payroll — Phase E3 ---------------------------------------------------
+  //
+  // Nullable throughout: not every employee has salary data entered yet, and
+  // payroll generation skips (not zero-fills) anyone missing basicSalary
+  // rather than silently paying them nothing. Integer HALALAS, same
+  // convention as EquipmentAssignment.rateAmount — see src/lib/money.ts.
+
+  basicSalary        Int?
+  housingAllowance   Int?
+  transportAllowance Int?
+  foodAllowance      Int?
+  siteAllowance      Int?
+  otherAllowance     Int?
+
+  /// Statutory minimum wage (QAR 500 housing / QAR 300 food) only applies
+  /// when NOT provided in kind. Defaults to false — the stricter check —
+  /// per owner confirmation rather than assumed.
+  housingProvidedInKind Boolean @default(false)
+  foodProvidedInKind    Boolean @default(false)
+
+  /// For paying wages and, eventually, the WPS SIF export (deferred — see
+  /// ROADMAP.md Phase E3, needs the actual bank's field spec first).
+  bankName          String?
+  bankAccountNumber String? /// IBAN or wage card number
+
   documents      Document[]
   assignments    OperatorAssignment[]
   qualifications OperatorQualification[]
+  payslips       Payslip[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -497,6 +534,7 @@ model EquipmentAssignment {
 
   invoiceLineItems InvoiceLineItem[]
   offHirePeriods   OffHirePeriod[]
+  timesheets       EquipmentTimesheet[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -568,12 +606,125 @@ model OperatorAssignment {
   note String?
 
   invoiceLineItems InvoiceLineItem[]
+  timesheets       OperatorTimesheet[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([contractId])
   @@index([operatorId])
+}
+
+// ---------------------------------------------------------------------------
+// Timesheets — Phase D
+// ---------------------------------------------------------------------------
+//
+// Two fully separate models, one per assignment type, matching a rule
+// confirmed explicitly with the user rather than assumed: equipment and
+// operator hours are NEVER derived from each other, even though they are
+// usually the same numbers in practice. EquipmentTimesheet drives invoicing
+// (src/lib/hours.ts's hoursFor(), eventually); OperatorTimesheet drives
+// payroll (Phase E3, not built yet). Reviewed against three real timesheets
+// before building — see ROADMAP.md for what that changed.
+//
+// Each links to a specific assignment, not the bare contract — same
+// reasoning EquipmentAssignment.deliveryNoteNumber already uses: a
+// replacement machine or operator gets its own timesheet history, not a
+// shared one that would misattribute hours across a mid-contract swap.
+
+/// Reads: staff enter workingHours directly rather than the system deriving
+/// it from startTime/endTime — real timesheets don't always subtract
+/// cleanly (overnight shifts, unstated breaks), so the figure people sign
+/// against is whatever they wrote, not whatever the clock math implies.
+/// startTime/endTime are reference text only, never used in a calculation.
+model EquipmentTimesheet {
+  id              String @id @default(cuid())
+  referenceNumber String @unique
+
+  equipmentAssignmentId String
+  equipmentAssignment   EquipmentAssignment @relation(fields: [equipmentAssignmentId], references: [id], onDelete: Cascade)
+
+  year  Int
+  month Int /// 1-12
+
+  /// DRAFT | SIGNED — must be SIGNED before invoicing can read from it
+  /// (that wiring is a follow-up step, not part of this build — see
+  /// ROADMAP.md).
+  status     String    @default("DRAFT")
+  signedDate DateTime?
+
+  days EquipmentTimesheetDay[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([equipmentAssignmentId, year, month])
+  @@index([equipmentAssignmentId])
+}
+
+model EquipmentTimesheetDay {
+  id          String             @id @default(cuid())
+  timesheetId String
+  timesheet   EquipmentTimesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+
+  date      DateTime
+  startTime String?
+  endTime   String?
+
+  /// Entered directly, not derived — see model comment above.
+  workingHours   Float @default(0)
+  breakdownHours Float @default(0)
+  remarks        String?
+
+  @@unique([timesheetId, date])
+  @@index([timesheetId])
+}
+
+/// Regular/overtime split is deliberately NOT stored here — it's computed
+/// from workingHours every time it's read (src/lib/overtime.ts), the same
+/// "one source of truth" pattern as getDocumentStatus and profile
+/// completeness elsewhere in this app. Storing it would let an edited hour
+/// figure drift out of step with a stale split.
+model OperatorTimesheet {
+  id              String @id @default(cuid())
+  referenceNumber String @unique
+
+  operatorAssignmentId String
+  operatorAssignment   OperatorAssignment @relation(fields: [operatorAssignmentId], references: [id], onDelete: Cascade)
+
+  year  Int
+  month Int /// 1-12
+
+  /// DRAFT | SIGNED — must be SIGNED before payroll can read from it, once
+  /// payroll (Phase E3) exists.
+  status     String    @default("DRAFT")
+  signedDate DateTime?
+
+  days OperatorTimesheetDay[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([operatorAssignmentId, year, month])
+  @@index([operatorAssignmentId])
+}
+
+model OperatorTimesheetDay {
+  id          String            @id @default(cuid())
+  timesheetId String
+  timesheet   OperatorTimesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+
+  date      DateTime
+  startTime String?
+  endTime   String?
+
+  /// Entered directly, not derived — see EquipmentTimesheetDay's comment.
+  workingHours   Float @default(0)
+  breakdownHours Float @default(0)
+  remarks        String?
+
+  @@unique([timesheetId, date])
+  @@index([timesheetId])
 }
 
 // ---------------------------------------------------------------------------
@@ -696,4 +847,93 @@ model InvoiceLineItem {
   amount   Int
 
   @@index([invoiceId])
+}
+
+// ---------------------------------------------------------------------------
+// Payroll — Phase E3
+// ---------------------------------------------------------------------------
+
+/// A date-range setting entered by staff, not hardcoded — moon-sighting
+/// dates for Ramadan aren't something to guess at in code. Empty (no rows)
+/// until the business adds this year's dates. Standard hours drop to 6/day,
+/// 36/week for any payroll day falling inside one, with no pay reduction.
+model RamadanPeriod {
+  id        String   @id @default(cuid())
+  year      Int
+  startDate DateTime
+  endDate   DateTime
+
+  createdAt DateTime @default(now())
+
+  @@unique([year])
+}
+
+/// One per calendar month, covering every employee's payslips for that
+/// period. FINALIZED locks its payslips the same way a SIGNED timesheet
+/// locks its daily rows.
+model PayrollPeriod {
+  id    String @id @default(cuid())
+  year  Int
+  month Int /// 1-12
+
+  /// DRAFT | FINALIZED
+  status         String    @default("DRAFT")
+  finalizedDate  DateTime?
+
+  payslips Payslip[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([year, month])
+}
+
+/// One per employee per PayrollPeriod. Salary fields are a SNAPSHOT taken at
+/// generation time, not a live read of Employee — editing an employee's
+/// salary later must never silently change a payslip already issued.
+/// Same reasoning InvoiceLineItem already applies to its own amount fields.
+model Payslip {
+  id              String @id @default(cuid())
+  referenceNumber String @unique
+
+  payrollPeriodId String
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  employeeId      String
+  employee        Employee @relation(fields: [employeeId], references: [id])
+
+  basicSalary        Int
+  housingAllowance   Int @default(0)
+  transportAllowance Int @default(0)
+  foodAllowance      Int @default(0)
+  siteAllowance      Int @default(0)
+  otherAllowance     Int @default(0)
+
+  /// ESTIMATE | TIMESHEET — TIMESHEET only when a SIGNED OperatorTimesheet
+  /// covered this employee for this period; every other employee (whole
+  /// workforce coverage is the point of Phase E3 — see ROADMAP.md) gets an
+  /// editable estimate. Same "labelled, never silently blended" idea as
+  /// InvoiceLineItem.hoursSource and the timesheets themselves.
+  hoursSource   String
+  standardHours Float /// Full-month expected hours, Ramadan-aware — what a shortfall is measured against.
+  regularHours  Float
+  overtimeHours Float
+
+  /// Flat amount + note, not a loan/advance ledger with balances — nobody's
+  /// asked for that yet.
+  deductionsAmount Int    @default(0)
+  deductionsNote   String?
+
+  /// Computed by src/lib/payroll.ts at generation/edit time and stored, not
+  /// derived on read — a payslip is a financial record once issued, the same
+  /// reasoning invoice line amounts already follow.
+  shortfallDeduction Int
+  overtimePay        Int
+  grossPay           Int
+  netPay             Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([payrollPeriodId, employeeId])
+  @@index([employeeId])
 }

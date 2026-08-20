@@ -52,6 +52,28 @@ const optionalDate = z
   )
   .refine((value) => value !== undefined, { message: 'Invalid date' })
 
+/** A money field in riyals ("137.5") becomes integer halalas. */
+const moneyField = (label: string) =>
+  z
+    .string()
+    .trim()
+    .optional()
+    .transform((value, ctx) => {
+      const halalas = parseQar(value ?? '')
+
+      if (halalas === undefined) {
+        ctx.addIssue({ code: 'custom', message: `${label} must be a number` })
+        return z.NEVER
+      }
+
+      return halalas
+    })
+
+const requiredMoneyField = (label: string) =>
+  moneyField(label).refine((value): value is number => value !== null, {
+    message: `${label} is required`,
+  })
+
 // --- Customer -------------------------------------------------------------
 
 export const customerSchema = z.object({
@@ -124,10 +146,27 @@ export type EquipmentInput = z.infer<typeof equipmentSchema>
 
 export const operatorSchema = z.object({
   name: z.string().trim().min(1, 'Operator name is required'),
+  // Phase E1 — the business's own staff number, distinct from the system id.
+  employeeNumber: optionalText,
+  jobTitle: optionalText,
   phone: optionalText,
   nationality: optionalText,
   source: z.enum(OPERATOR_SOURCES, { message: 'Select a source' }),
   notes: optionalText,
+  // Phase E3 — payroll. All optional: not every employee has salary data
+  // entered yet, and payroll generation skips (never zero-fills) anyone
+  // missing basicSalary. Minimum-wage compliance is checked separately
+  // (src/lib/payroll.ts's checkMinimumWage), as a warning, not a block.
+  basicSalary: moneyField('Basic salary'),
+  housingAllowance: moneyField('Housing allowance'),
+  transportAllowance: moneyField('Transport allowance'),
+  foodAllowance: moneyField('Food allowance'),
+  siteAllowance: moneyField('Site allowance'),
+  otherAllowance: moneyField('Other allowance'),
+  housingProvidedInKind: z.boolean(),
+  foodProvidedInKind: z.boolean(),
+  bankName: optionalText,
+  bankAccountNumber: optionalText,
 })
 
 export type OperatorInput = z.infer<typeof operatorSchema>
@@ -264,28 +303,6 @@ export type DocumentInput = z.infer<typeof documentSchema>
 
 // --- Contract -------------------------------------------------------------
 
-/** A money field in riyals ("137.5") becomes integer halalas. */
-const moneyField = (label: string) =>
-  z
-    .string()
-    .trim()
-    .optional()
-    .transform((value, ctx) => {
-      const halalas = parseQar(value ?? '')
-
-      if (halalas === undefined) {
-        ctx.addIssue({ code: 'custom', message: `${label} must be a number` })
-        return z.NEVER
-      }
-
-      return halalas
-    })
-
-const requiredMoneyField = (label: string) =>
-  moneyField(label).refine((value): value is number => value !== null, {
-    message: `${label} is required`,
-  })
-
 const requiredDate = (label: string) =>
   z
     .string()
@@ -387,6 +404,47 @@ export const operatorAssignmentSchema = z
   )
 
 export type OperatorAssignmentInput = z.infer<typeof operatorAssignmentSchema>
+
+// --- Timesheets -------------------------------------------------------------
+
+/**
+ * Just the "which assignment, which month" picker — the daily rows
+ * themselves are validated by hand in the update action (src/lib/actions/
+ * timesheets.ts), since a zod array schema over ~30 rows would need
+ * per-cell path wiring in the table UI for little real benefit over a
+ * clear row-specific error message.
+ */
+export const timesheetCreateSchema = z.object({
+  assignmentId: z.string().min(1, 'Select an assignment'),
+  year: z.coerce.number().int().min(2020).max(2100),
+  month: z.coerce.number().int().min(1).max(12),
+})
+
+export type TimesheetCreateInput = z.infer<typeof timesheetCreateSchema>
+
+// --- Payroll ----------------------------------------------------------------
+
+export const payrollPeriodCreateSchema = z.object({
+  year: z.coerce.number().int().min(2020).max(2100),
+  month: z.coerce.number().int().min(1).max(12),
+})
+
+export type PayrollPeriodCreateInput = z.infer<typeof payrollPeriodCreateSchema>
+
+/** Entered by staff — see RamadanPeriod's model comment for why these
+ * dates are never hardcoded. */
+export const ramadanPeriodSchema = z
+  .object({
+    year: z.coerce.number().int().min(2020).max(2100),
+    startDate: requiredDate('Start date'),
+    endDate: requiredDate('End date'),
+  })
+  .refine((data) => data.endDate >= data.startDate, {
+    message: 'End date cannot be before the start date',
+    path: ['endDate'],
+  })
+
+export type RamadanPeriodInput = z.infer<typeof ramadanPeriodSchema>
 
 /** Flatten zod issues into { field: message } for rendering next to inputs. */
 export function fieldErrors(error: z.ZodError): Record<string, string> {

@@ -137,12 +137,18 @@ export const EQUIPMENT_DOCUMENT_TYPES = [
 ] as const
 
 export const OPERATOR_DOCUMENT_TYPES = [
+  // Legal and identity — compliance-critical, an expiry here can stop
+  // someone working. Qatar ID and Visa/Residence Permit escalate harder
+  // than the rest — see EXTENDED_ESCALATION_TYPES in document-status.ts.
   'Qatar ID',
+  'Passport',
+  'Visa/Residence Permit', // Added Phase E1 (2026-08-18)
+  'Employment Contract', // Added Phase E1 (2026-08-18)
+  'Medical Certificate',
+  // Competency and site access
   'Driving License',
   'Operator License',
-  'Medical Certificate',
   '3rd Party Certificate',
-  'Passport',
   // Added Phase B — Gate Pass moved here from equipment (2026-08-15, see
   // EQUIPMENT_DOCUMENT_TYPES); H2S and Defensive Driving are always separate
   // records, never a single combined certificate.
