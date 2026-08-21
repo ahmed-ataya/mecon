@@ -426,10 +426,37 @@ pay above, never below.
 
 Built ahead of Phase B, not held for Phase D — see the sequencing decision
 above. Physical table kept as `Operator` (`@@map`), so this landed as one
-additive column plus a Prisma-model rename, not a data migration. UI, routes
-and nav are untouched — still "Operators" throughout, since nothing yet
-exposes the other five categories. Every read that used to get "only
-operators" for free now filters explicitly on `category: 'OPERATOR'`.
+additive column plus a Prisma-model rename, not a data migration.
+
+**UI caught up 2026-08-20**, once the real 50-person roster gave the other
+five categories actual data to look at. The general list/form now covers
+all six categories — nav renamed "Operators" → "Employees" (routes and
+component/file names deliberately kept as `operators/*` underneath — same
+tolerated name-vs-reality gap the database already has via `@@map`;
+renaming every file for a cosmetic gain risked breaking the working
+Operator-specific code that Timesheets and Contracts depend on). Category
+is now a real, user-set field on the form (was hardcoded to Operator on
+create). "Machines qualified to operate" only shows for Operator category.
+Contract assignment's operator picker (`loadOperatorOptions` in
+contract-options.ts) is unchanged and still filters to Operator only —
+confirmed unaffected, not just assumed: searched a freshly-created
+Admin/Office test employee in the contract form's operator field and
+confirmed "No matches".
+
+**Bug found and fixed in the same pass**: profile completeness was
+checking every employee against the full Operator document checklist —
+every category shares `ownerType: 'OPERATOR'` on Document (that's the FK
+discriminator, not the person's actual job), so a Welder would have
+needed an "Operator License" to ever reach 100%. `computeCompleteness`
+gained an optional checklist override
+(`EMPLOYEE_CATEGORY_DOCUMENT_TYPES[employee.category]` in enums.ts); the
+document type PICKER stays the full unified list for everyone,
+deliberately — only what counts toward 100% narrows, so an unusual real
+need can still be recorded even if it won't move the needle.
+
+Every read that filters on `category: 'OPERATOR'` explicitly (the
+contract picker, payroll's whole-workforce generation) is unaffected by
+any of this — see each phase's own notes.
 
 `Operator` becomes `Employee` with a `category` field. Operator assignments
 reference an Employee whose category is Operator. Reason: payroll, leave and

@@ -13,14 +13,14 @@ export default async function NewOperatorPage() {
           href="/operators"
           className="text-sm text-slate-500 hover:text-slate-900"
         >
-          ← Operators
+          ← Employees
         </Link>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-          Add operator
+          Add employee
         </h1>
         <p className="mt-1 text-sm text-slate-500">
           Qatar ID, licences and medical certificates can be added once the
-          operator is saved.
+          employee is saved.
         </p>
       </div>
 
@@ -28,7 +28,7 @@ export default async function NewOperatorPage() {
         <OperatorForm
           action={createOperator}
           equipmentTypeOptions={equipmentTypeOptions}
-          submitLabel="Create operator"
+          submitLabel="Create employee"
           cancelHref="/operators"
         />
       </div>

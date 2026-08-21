@@ -3,7 +3,13 @@ import { notFound } from 'next/navigation'
 import { db } from '@/lib/db'
 import { rollUpStatus, summarizeStatuses } from '@/lib/document-status'
 import { computeCompleteness } from '@/lib/document-completeness'
-import { OPERATOR_SOURCE_LABELS, type OperatorSource } from '@/lib/enums'
+import {
+  EMPLOYEE_CATEGORY_DOCUMENT_TYPES,
+  EMPLOYEE_CATEGORY_LABELS,
+  OPERATOR_SOURCE_LABELS,
+  type EmployeeCategory,
+  type OperatorSource,
+} from '@/lib/enums'
 import { loadEquipmentTypeOptions } from '@/lib/equipment-options'
 import {
   serializeDocument,
@@ -32,10 +38,12 @@ export default async function OperatorDetailPage({
     loadEquipmentTypeOptions(),
   ])
 
-  // Employee now holds every workforce category (Phase E0) — this page is
-  // specifically the operator view, so a non-operator id is a 404 here, not
-  // a leak into a page built around operator-shaped fields.
-  if (!operator || operator.category !== 'OPERATOR') notFound()
+  // General employee page since Phase E0/HR (2026-08-20) — every category
+  // is valid here now, not just Operator.
+  if (!operator) notFound()
+
+  const category = operator.category as EmployeeCategory
+  const isOperator = category === 'OPERATOR'
 
   const status = rollUpStatus(operator.documents)
   const { expired, expiringSoon } = summarizeStatuses(operator.documents)
@@ -46,9 +54,11 @@ export default async function OperatorDetailPage({
     'OPERATOR',
     operator.documents,
     operator.qualifications.map((q) => q.equipmentType),
+    EMPLOYEE_CATEGORY_DOCUMENT_TYPES[category],
   )
   const sourceLabel =
     OPERATOR_SOURCE_LABELS[operator.source as OperatorSource] ?? operator.source
+  const categoryLabel = EMPLOYEE_CATEGORY_LABELS[category] ?? operator.category
 
   return (
     <div className="space-y-6">
@@ -57,7 +67,7 @@ export default async function OperatorDetailPage({
           href="/operators"
           className="text-sm text-slate-500 hover:text-slate-900"
         >
-          ← Operators
+          ← Employees
         </Link>
 
         <div className="mt-2 flex items-start justify-between gap-4">
@@ -69,7 +79,7 @@ export default async function OperatorDetailPage({
               <StatusBadge status={status} />
             </div>
             <p className="mt-1 text-sm text-slate-500">
-              {operator.jobTitle && `${operator.jobTitle} · `}
+              {operator.jobTitle ? `${operator.jobTitle} · ` : `${categoryLabel} · `}
               {sourceLabel}
               {operator.nationality && ` · ${operator.nationality}`}
             </p>
@@ -96,8 +106,7 @@ export default async function OperatorDetailPage({
               <strong>
                 {expired} document{expired === 1 ? '' : 's'} expired.
               </strong>{' '}
-              This operator should not be assigned to a site until they are
-              renewed.
+              This employee should not be working until these are renewed.
             </p>
           )}
           {expiringSoon > 0 && (
@@ -114,30 +123,33 @@ export default async function OperatorDetailPage({
         <dl className="grid gap-4 text-sm sm:grid-cols-2">
           <Detail label="Employee number" value={operator.employeeNumber} />
           <Detail label="Job title" value={operator.jobTitle} />
+          <Detail label="Category" value={categoryLabel} />
           <Detail label="Source" value={sourceLabel} />
           <Detail label="Phone" value={operator.phone} />
           <Detail label="Nationality" value={operator.nationality} />
-          <div className="sm:col-span-2">
-            <dt className="text-xs uppercase tracking-wide text-slate-500">
-              Qualified to operate
-            </dt>
-            <dd className="mt-1">
-              {operator.qualifications.length === 0 ? (
-                <span className="text-slate-900">—</span>
-              ) : (
-                <ul className="flex flex-wrap gap-1.5">
-                  {operator.qualifications.map((q) => (
-                    <li
-                      key={q.id}
-                      className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-800"
-                    >
-                      {q.equipmentType}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </dd>
-          </div>
+          {isOperator && (
+            <div className="sm:col-span-2">
+              <dt className="text-xs uppercase tracking-wide text-slate-500">
+                Qualified to operate
+              </dt>
+              <dd className="mt-1">
+                {operator.qualifications.length === 0 ? (
+                  <span className="text-slate-900">—</span>
+                ) : (
+                  <ul className="flex flex-wrap gap-1.5">
+                    {operator.qualifications.map((q) => (
+                      <li
+                        key={q.id}
+                        className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-800"
+                      >
+                        {q.equipmentType}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </dd>
+            </div>
+          )}
           <Detail label="Notes" value={operator.notes} />
         </dl>
       </section>

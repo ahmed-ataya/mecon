@@ -6,6 +6,7 @@ import {
   ARRANGEMENTS,
   CAPACITY_UNITS,
   DOCUMENT_TYPES_BY_OWNER,
+  EMPLOYEE_CATEGORIES,
   EQUIPMENT_ASSIGNMENT_REASONS,
   OPERATOR_ASSIGNMENT_REASONS,
   OPERATOR_SOURCES,
@@ -149,6 +150,9 @@ export const operatorSchema = z.object({
   // Phase E1 — the business's own staff number, distinct from the system id.
   employeeNumber: optionalText,
   jobTitle: optionalText,
+  // General employee list (2026-08-20) — was hardcoded to OPERATOR before
+  // this; now a real, user-set field so the form covers the whole workforce.
+  category: z.enum(EMPLOYEE_CATEGORIES, { message: 'Select a category' }),
   phone: optionalText,
   nationality: optionalText,
   source: z.enum(OPERATOR_SOURCES, { message: 'Select a source' }),

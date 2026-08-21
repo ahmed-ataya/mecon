@@ -17,7 +17,7 @@ const NAV = [
   { href: '/lpos', label: 'LPOs' },
   { href: '/customers', label: 'Customers' },
   { href: '/equipment', label: 'Equipment' },
-  { href: '/operators', label: 'Operators' },
+  { href: '/operators', label: 'Employees' },
 ]
 
 export default function RootLayout({

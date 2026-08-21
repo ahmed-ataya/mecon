@@ -69,10 +69,11 @@ export const CAPACITY_UNIT_LABELS: Record<CapacityUnit, string> = {
 /**
  * Every category the Employee table is structured to hold, per Phase E0.
  *
- * Only OPERATOR is actually used anywhere yet — nothing in the app creates
- * or picks the other five. They are listed here now so later phases (E1
- * documents, E2 leave, E3 payroll) have the real values to build against,
- * not because there is a category picker anywhere today.
+ * All six are usable in the general employee list/form (built 2026-08-20).
+ * The CONTRACT operator picker (loadOperatorOptions in contract-options.ts)
+ * still filters to OPERATOR only, deliberately — assigning a Camp Boss to
+ * run an excavator would be wrong, and that filter has nothing to do with
+ * whether the other categories have their own UI elsewhere.
  */
 export const EMPLOYEE_CATEGORIES = [
   'OPERATOR',
@@ -163,6 +164,53 @@ export const DOCUMENT_TYPES_BY_OWNER: Record<OwnerType, readonly string[]> = {
   CUSTOMER: CUSTOMER_DOCUMENT_TYPES,
   EQUIPMENT: EQUIPMENT_DOCUMENT_TYPES,
   OPERATOR: OPERATOR_DOCUMENT_TYPES,
+}
+
+/**
+ * Which of OPERATOR_DOCUMENT_TYPES count toward PROFILE COMPLETENESS for
+ * each employee category — built alongside the general employee list
+ * (2026-08-20), once non-operator categories actually had records to look
+ * at. The document TYPE PICKER itself stays the single unified list above
+ * for every category, deliberately — restricting what can be RECORDED risks
+ * hiding a real, unusual need (e.g. a workshop hand who occasionally needs
+ * site access); this only narrows what's REQUIRED to reach 100%, so a
+ * Welder isn't held to an "Operator License" they'll never have.
+ *
+ * Everyone needs the universal legal/identity documents. Operator- and
+ * driver-specific competency documents are added on top for the categories
+ * that actually need them — a judgment call, not a spec:
+ *   - Driving License: Operator and Driver (operators often move between
+ *     sites too, not just the assigned machine).
+ *   - Operator License, 3rd Party Certificate: Operator only.
+ *   - Gate Pass, Defensive Driving Certificate: Operator and Driver (both
+ *     roles put someone on a client site or the road); not Workshop/Admin/
+ *     Management, who don't.
+ *   - H2S Certificate: Operator only, per Phase B3's QatarEnergy scope.
+ * Confirm with the business if any of these read wrong.
+ */
+const EMPLOYEE_CORE_DOCUMENT_TYPES = [
+  'Qatar ID',
+  'Passport',
+  'Visa/Residence Permit',
+  'Employment Contract',
+  'Medical Certificate',
+] as const
+
+export const EMPLOYEE_CATEGORY_DOCUMENT_TYPES: Record<
+  EmployeeCategory,
+  readonly string[]
+> = {
+  OPERATOR: OPERATOR_DOCUMENT_TYPES.filter((type) => type !== 'Other'),
+  DRIVER: [
+    ...EMPLOYEE_CORE_DOCUMENT_TYPES,
+    'Driving License',
+    'Gate Pass',
+    'Defensive Driving Certificate',
+  ],
+  MECHANIC_WORKSHOP: EMPLOYEE_CORE_DOCUMENT_TYPES,
+  HELPER_LABOURER: EMPLOYEE_CORE_DOCUMENT_TYPES,
+  ADMIN_OFFICE: EMPLOYEE_CORE_DOCUMENT_TYPES,
+  MANAGEMENT: EMPLOYEE_CORE_DOCUMENT_TYPES,
 }
 
 /** The one document type that unlocks the 3rd party fields. */

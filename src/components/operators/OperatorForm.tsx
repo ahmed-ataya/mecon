@@ -3,7 +3,13 @@
 import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import type { Employee } from '@prisma/client'
-import { OPERATOR_SOURCES, OPERATOR_SOURCE_LABELS } from '@/lib/enums'
+import {
+  EMPLOYEE_CATEGORIES,
+  EMPLOYEE_CATEGORY_LABELS,
+  OPERATOR_SOURCES,
+  OPERATOR_SOURCE_LABELS,
+  type EmployeeCategory,
+} from '@/lib/enums'
 import { toRiyalInput } from '@/lib/money'
 import { checkMinimumWage } from '@/lib/payroll'
 import { Select } from '@/components/ui/Select'
@@ -47,6 +53,8 @@ export function OperatorForm({
     name: values?.name ?? operator?.name ?? '',
     employeeNumber: values?.employeeNumber ?? operator?.employeeNumber ?? '',
     jobTitle: values?.jobTitle ?? operator?.jobTitle ?? '',
+    category:
+      values?.category ?? operator?.category ?? EMPLOYEE_CATEGORIES[0],
     phone: values?.phone ?? operator?.phone ?? '',
     nationality: values?.nationality ?? operator?.nationality ?? '',
     source: values?.source ?? operator?.source ?? OPERATOR_SOURCES[0],
@@ -74,6 +82,9 @@ export function OperatorForm({
   // same as the inputs; checkMinimumWage itself works in halalas, but a
   // ×100 comparison is equivalent and avoids importing parseQar just for a
   // live warning.
+  const [category, setCategory] = useState<EmployeeCategory>(
+    initial.category as EmployeeCategory,
+  )
   const [basicSalary, setBasicSalary] = useState(initial.basicSalary)
   const [housingAllowance, setHousingAllowance] = useState(initial.housingAllowance)
   const [foodAllowance, setFoodAllowance] = useState(initial.foodAllowance)
@@ -93,7 +104,7 @@ export function OperatorForm({
       <FormError message={errors.form} />
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Operator name" htmlFor="name">
+        <Field label="Name" htmlFor="name">
           <input
             id="name"
             name="name"
@@ -106,21 +117,18 @@ export function OperatorForm({
           )}
         </Field>
 
-        <Field
-          label="Source"
-          htmlFor="source"
-          hint="Market operators are subcontracted and re-billed to the customer."
-        >
+        <Field label="Category" htmlFor="category">
           <Select
-            name="source"
-            options={OPERATOR_SOURCES.map((source) => ({
-              value: source,
-              label: OPERATOR_SOURCE_LABELS[source],
+            name="category"
+            options={EMPLOYEE_CATEGORIES.map((value) => ({
+              value,
+              label: EMPLOYEE_CATEGORY_LABELS[value],
             }))}
-            defaultValue={initial.source}
+            defaultValue={initial.category}
+            onSelect={(value) => setCategory(value as EmployeeCategory)}
           />
-          {errors.source && (
-            <p className="mt-1 text-xs text-red-600">{errors.source}</p>
+          {errors.category && (
+            <p className="mt-1 text-xs text-red-600">{errors.category}</p>
           )}
         </Field>
       </div>
@@ -149,7 +157,25 @@ export function OperatorForm({
         </Field>
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-3">
+        <Field
+          label="Source"
+          htmlFor="source"
+          hint="Market employees are subcontracted and re-billed to the customer."
+        >
+          <Select
+            name="source"
+            options={OPERATOR_SOURCES.map((source) => ({
+              value: source,
+              label: OPERATOR_SOURCE_LABELS[source],
+            }))}
+            defaultValue={initial.source}
+          />
+          {errors.source && (
+            <p className="mt-1 text-xs text-red-600">{errors.source}</p>
+          )}
+        </Field>
+
         <Field label="Phone" htmlFor="phone">
           <input
             id="phone"
@@ -169,18 +195,20 @@ export function OperatorForm({
         </Field>
       </div>
 
-      <Field
-        label="Machines qualified to operate"
-        htmlFor="qualifiedEquipmentTypes"
-        hint="Not a closed list — type anything, or pick a suggestion."
-      >
-        <MultiCombobox
-          name="qualifiedEquipmentTypes"
-          options={equipmentTypeOptions}
-          defaultValues={initial.qualifiedTypes}
-          placeholder="e.g. Excavator, Boom Truck…"
-        />
-      </Field>
+      {category === 'OPERATOR' && (
+        <Field
+          label="Machines qualified to operate"
+          htmlFor="qualifiedEquipmentTypes"
+          hint="Not a closed list — type anything, or pick a suggestion."
+        >
+          <MultiCombobox
+            name="qualifiedEquipmentTypes"
+            options={equipmentTypeOptions}
+            defaultValues={initial.qualifiedTypes}
+            placeholder="e.g. Excavator, Boom Truck…"
+          />
+        </Field>
+      )}
 
       <fieldset className="space-y-5 rounded-md border border-slate-200 p-4">
         <legend className="px-1 text-sm font-medium text-slate-700">

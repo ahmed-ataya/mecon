@@ -20,6 +20,7 @@ function readOperatorForm(formData: FormData) {
     name: String(formData.get('name') ?? ''),
     employeeNumber: String(formData.get('employeeNumber') ?? ''),
     jobTitle: String(formData.get('jobTitle') ?? ''),
+    category: String(formData.get('category') ?? ''),
     phone: String(formData.get('phone') ?? ''),
     nationality: String(formData.get('nationality') ?? ''),
     source: String(formData.get('source') ?? ''),
@@ -73,11 +74,6 @@ export async function createOperator(
   const operator = await db.employee.create({
     data: {
       ...parsed.data,
-      // Explicit, not just relying on the column default — this action is
-      // reached only from the operators UI, so it should only ever be able
-      // to create an operator (Phase E0: Employee now holds other categories
-      // too).
-      category: 'OPERATOR',
       qualifications: {
         create: qualifiedTypes.map((equipmentType) => ({ equipmentType })),
       },
@@ -132,7 +128,7 @@ export async function deleteOperator(id: string) {
 
   if (assignmentCount > 0) {
     return {
-      error: `This operator has ${assignmentCount} assignment(s) and cannot be deleted.`,
+      error: `This employee has ${assignmentCount} assignment(s) and cannot be deleted.`,
     }
   }
 

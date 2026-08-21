@@ -19,8 +19,7 @@ export default async function EditOperatorPage({
     loadEquipmentTypeOptions(),
   ])
 
-  // See src/app/operators/[id]/page.tsx for why category is checked here too.
-  if (!operator || operator.category !== 'OPERATOR') notFound()
+  if (!operator) notFound()
 
   // Bind the id so the shared form keeps the same (state, formData) shape.
   const action = updateOperator.bind(null, id)
@@ -35,7 +34,7 @@ export default async function EditOperatorPage({
           ← {operator.name}
         </Link>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-          Edit operator
+          Edit employee
         </h1>
       </div>
 

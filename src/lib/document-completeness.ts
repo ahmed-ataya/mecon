@@ -53,13 +53,22 @@ function isAddressed(document: CompletenessDocument): boolean {
  * explicitly marked not applicable — a deliberate "certification doesn't
  * apply to this operator" decision that overrides the per-machine
  * breakdown.
+ *
+ * `checklistOverride` (added alongside the general employee list,
+ * 2026-08-20): every Employee category shares ownerType OPERATOR — that's
+ * the Document FK discriminator, not the person's actual job — so without
+ * this, a Welder would need an "Operator License" to ever reach 100%.
+ * Callers pass EMPLOYEE_CATEGORY_DOCUMENT_TYPES[employee.category] here;
+ * omitted, this falls back to the full DOCUMENT_TYPES_BY_OWNER list exactly
+ * as before, so CUSTOMER/EQUIPMENT callers are unaffected.
  */
 export function computeCompleteness(
   ownerType: OwnerType,
   documents: CompletenessDocument[],
   qualifiedMachineTypes: string[] = [],
+  checklistOverride?: readonly string[],
 ): ProfileCompleteness {
-  const checklist = DOCUMENT_TYPES_BY_OWNER[ownerType].filter(
+  const checklist = (checklistOverride ?? DOCUMENT_TYPES_BY_OWNER[ownerType]).filter(
     (type) => type !== 'Other',
   )
 
