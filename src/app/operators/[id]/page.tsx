@@ -23,6 +23,9 @@ import { loadEmployeeLeaveSummary } from '@/lib/leave-queries'
 import { deriveEmployeeStatus, EMPLOYEE_STATUS_LABELS } from '@/lib/employee-status'
 import { formatDate, todayUtc } from '@/lib/dates'
 import { LEAVE_STATUS_LABELS, LEAVE_TYPE_LABELS, type LeaveStatus, type LeaveType } from '@/lib/enums'
+import { findDeletionRecord } from '@/lib/audit-queries'
+import { DeletedRecordNotice } from '@/components/audit/DeletedRecordNotice'
+import { RecordHistoryPanel } from '@/components/audit/RecordHistoryPanel'
 
 export default async function OperatorDetailPage({
   params,
@@ -45,7 +48,15 @@ export default async function OperatorDetailPage({
 
   // General employee page since Phase E0/HR (2026-08-20) — every category
   // is valid here now, not just Operator.
-  if (!operator) notFound()
+  if (!operator) {
+    const deletion = await findDeletionRecord('Employee', id)
+    if (deletion) {
+      return (
+        <DeletedRecordNotice entityTypeLabel="Employee" entityLabel={deletion.entityLabel} />
+      )
+    }
+    notFound()
+  }
 
   const employeeStatus = deriveEmployeeStatus({
     dateOfExit: operator.dateOfExit,
@@ -243,6 +254,8 @@ export default async function OperatorDetailPage({
         documents={documents}
         equipmentTypeOptions={equipmentTypeOptions}
       />
+
+      <RecordHistoryPanel entityType="Employee" entityId={operator.id} />
     </div>
   )
 }

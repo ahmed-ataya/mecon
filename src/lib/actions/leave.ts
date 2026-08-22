@@ -6,7 +6,8 @@ import { db } from '../db'
 import { todayUtc } from '../dates'
 import { fieldErrors, leaveRequestSchema, publicHolidaySchema } from '../validation'
 import { requireDelete, requireWrite } from '../auth/guard'
-import { logAudit } from '../audit'
+import { createdField, deletedField, fmt, logAudit } from '../audit'
+import { LEAVE_STATUS_LABELS, LEAVE_TYPE_LABELS, type LeaveStatus, type LeaveType } from '../enums'
 
 /**
  * "Approval" is a status field only, not a real approval trail — there is
@@ -73,6 +74,12 @@ export async function createLeaveRequest(
     entityType: 'LeaveRequest',
     entityId: request.id,
     entityLabel: `${employee.name} — ${parsed.data.leaveType}`,
+    changedFields: [
+      createdField('Employee', employee.name),
+      createdField('Leave type', request.leaveType as LeaveType, (t) => LEAVE_TYPE_LABELS[t]),
+      createdField('Start date', request.startDate, fmt.date),
+      createdField('End date', request.endDate, fmt.date),
+    ],
   })
 
   revalidatePath('/leave')
@@ -110,6 +117,14 @@ export async function approveLeaveRequest(
     entityType: 'LeaveRequest',
     entityId: id,
     entityLabel: `Approved by ${decidedBy}`,
+    changedFields: [
+      {
+        field: 'Status',
+        was: LEAVE_STATUS_LABELS[request.status as LeaveStatus],
+        now: LEAVE_STATUS_LABELS.APPROVED,
+      },
+      { field: 'Decided by', was: null, now: decidedBy },
+    ],
   })
 
   revalidatePath('/leave')
@@ -144,6 +159,14 @@ export async function rejectLeaveRequest(
     entityType: 'LeaveRequest',
     entityId: id,
     entityLabel: `Rejected by ${decidedBy}`,
+    changedFields: [
+      {
+        field: 'Status',
+        was: LEAVE_STATUS_LABELS[request.status as LeaveStatus],
+        now: LEAVE_STATUS_LABELS.REJECTED,
+      },
+      { field: 'Decided by', was: null, now: decidedBy },
+    ],
   })
 
   revalidatePath('/leave')
@@ -166,6 +189,13 @@ export async function cancelLeaveRequest(id: string) {
     entityType: 'LeaveRequest',
     entityId: id,
     entityLabel: 'Cancelled',
+    changedFields: [
+      {
+        field: 'Status',
+        was: LEAVE_STATUS_LABELS[request.status as LeaveStatus],
+        now: LEAVE_STATUS_LABELS.CANCELLED,
+      },
+    ],
   })
 
   revalidatePath('/leave')
@@ -205,6 +235,11 @@ export async function createPublicHoliday(
     entityType: 'PublicHoliday',
     entityId: holiday.id,
     entityLabel: holiday.name,
+    changedFields: [
+      createdField('Name', holiday.name),
+      createdField('Start date', holiday.startDate, fmt.date),
+      createdField('End date', holiday.endDate, fmt.date),
+    ],
   })
 
   revalidatePath('/leave/holidays')
@@ -222,6 +257,11 @@ export async function deletePublicHoliday(id: string) {
     entityType: 'PublicHoliday',
     entityId: holiday.id,
     entityLabel: holiday.name,
+    changedFields: [
+      deletedField('Name', holiday.name),
+      deletedField('Start date', holiday.startDate, fmt.date),
+      deletedField('End date', holiday.endDate, fmt.date),
+    ],
   })
 
   revalidatePath('/leave/holidays')

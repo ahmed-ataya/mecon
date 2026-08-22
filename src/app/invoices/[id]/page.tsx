@@ -15,6 +15,9 @@ import type { Warning } from '@/lib/warnings'
 import { WarningList } from '@/components/contracts/WarningList'
 import { InvoiceActions } from '@/components/invoices/InvoiceActions'
 import { buttonSecondaryClass } from '@/components/ui/form'
+import { findDeletionRecord } from '@/lib/audit-queries'
+import { DeletedRecordNotice } from '@/components/audit/DeletedRecordNotice'
+import { RecordHistoryPanel } from '@/components/audit/RecordHistoryPanel'
 
 export default async function InvoiceDetailPage({
   params,
@@ -37,7 +40,15 @@ export default async function InvoiceDetailPage({
     },
   })
 
-  if (!invoice) notFound()
+  if (!invoice) {
+    const deletion = await findDeletionRecord('Invoice', id)
+    if (deletion) {
+      return (
+        <DeletedRecordNotice entityTypeLabel="Invoice" entityLabel={deletion.entityLabel} />
+      )
+    }
+    notFound()
+  }
 
   const state = getInvoiceState(invoice)
   const isDraft = state === 'DRAFT'
@@ -272,6 +283,8 @@ export default async function InvoiceDetailPage({
           still change. Issuing freezes it.
         </p>
       )}
+
+      <RecordHistoryPanel entityType="Invoice" entityId={invoice.id} />
     </div>
   )
 }

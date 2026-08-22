@@ -27,6 +27,9 @@ import { EquipmentTimeline } from '@/components/contracts/EquipmentTimeline'
 import { OperatorTimeline } from '@/components/contracts/OperatorTimeline'
 import { WarningList } from '@/components/contracts/WarningList'
 import { buttonSecondaryClass } from '@/components/ui/form'
+import { findDeletionRecord } from '@/lib/audit-queries'
+import { DeletedRecordNotice } from '@/components/audit/DeletedRecordNotice'
+import { RecordHistoryPanel } from '@/components/audit/RecordHistoryPanel'
 
 export default async function ContractDetailPage({
   params,
@@ -41,7 +44,15 @@ export default async function ContractDetailPage({
     loadOperatorOptions(),
   ])
 
-  if (!contract) notFound()
+  if (!contract) {
+    const deletion = await findDeletionRecord('Contract', id)
+    if (deletion) {
+      return (
+        <DeletedRecordNotice entityTypeLabel="Contract" entityLabel={deletion.entityLabel} />
+      )
+    }
+    notFound()
+  }
 
   // Phase B4/F5: the eligibility check both replacement flows show live
   // needs to know about the OTHER half of the pairing — the current
@@ -181,6 +192,8 @@ export default async function ContractDetailPage({
         siteRegime={contract.siteRegime}
         currentMachineType={currentMachineType}
       />
+
+      <RecordHistoryPanel entityType="Contract" entityId={contract.id} />
     </div>
   )
 }

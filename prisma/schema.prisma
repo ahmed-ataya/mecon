@@ -99,8 +99,26 @@ model AuditLog {
   entityId    String
   entityLabel String?
 
+  /// Field-level detail — an array of `{ field, was, now }`, already
+  /// human-formatted (money as "QAR 3,000", dates as "31 Dec 2026", not
+  /// raw halalas/ISO strings) at write time, not derived on read. That's
+  /// deliberate: this log is meant to stay readable for years, and a
+  /// later refactor of how a field is formatted or labelled must not
+  /// silently reword history. Built by src/lib/audit.ts's diffField/
+  /// createdField helpers, which also truncate any single value to 200
+  /// chars — see their comments for why. CREATE rows use `was: null`
+  /// (nothing existed before); DELETE rows use `now: null` the same way
+  /// CREATE uses it in reverse — see the helpers. Only meaningful,
+  /// human-relevant fields are ever included — never every column, never
+  /// file contents (file NAMES only), and the row stays lean because only
+  /// fields that actually changed are recorded, not a full before/after
+  /// snapshot of the whole record.
+  changedFields Json?
+
   createdAt DateTime @default(now())
 
+  /// (entityType, entityId) is what makes a record's own "Change history"
+  /// panel fast — see e.g. the Contract detail page.
   @@index([entityType, entityId])
   @@index([createdAt])
   @@index([userId])

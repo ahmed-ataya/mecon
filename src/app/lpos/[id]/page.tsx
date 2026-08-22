@@ -17,6 +17,9 @@ import {
 } from '@/lib/contract-status'
 import { WarningList } from '@/components/contracts/WarningList'
 import { buttonSecondaryClass } from '@/components/ui/form'
+import { findDeletionRecord } from '@/lib/audit-queries'
+import { DeletedRecordNotice } from '@/components/audit/DeletedRecordNotice'
+import { RecordHistoryPanel } from '@/components/audit/RecordHistoryPanel'
 
 export default async function LpoDetailPage({
   params,
@@ -41,7 +44,13 @@ export default async function LpoDetailPage({
     },
   })
 
-  if (!lpo) notFound()
+  if (!lpo) {
+    const deletion = await findDeletionRecord('Lpo', id)
+    if (deletion) {
+      return <DeletedRecordNotice entityTypeLabel="LPO" entityLabel={deletion.entityLabel} />
+    }
+    notFound()
+  }
 
   const openness = getLpoOpenness(lpo)
 
@@ -174,6 +183,8 @@ export default async function LpoDetailPage({
           </ul>
         )}
       </section>
+
+      <RecordHistoryPanel entityType="Lpo" entityId={lpo.id} />
     </div>
   )
 }

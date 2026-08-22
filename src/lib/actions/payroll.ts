@@ -9,9 +9,10 @@ import { computePayslip, standardHoursForDate, standardHoursForMonth } from '../
 import { countApprovedSickDaysBefore, resolveLeaveDaysInRange } from '../leave'
 import type { LeaveType } from '../enums'
 import { formatTimesheetNumber, nextTimesheetSequence } from '../timesheet-number'
+import { monthLabel } from '../timesheet'
 import { fieldErrors, payrollPeriodCreateSchema } from '../validation'
 import { requirePayrollAccess } from '../auth/guard'
-import { logAudit } from '../audit'
+import { createdField, diffField, fmt, type FieldChange, logAudit } from '../audit'
 
 /** Reuses the generic sequential-numbering helper Phase D built — the name
  * is a historical accident (it was written for timesheets first), the logic
@@ -283,7 +284,7 @@ export async function createPayrollPeriod(
 
   const period = await db.payrollPeriod.create({ data: { year, month } })
 
-  await generatePayslips(period.id, year, month)
+  const { created } = await generatePayslips(period.id, year, month)
 
   await logAudit({
     user,
@@ -291,6 +292,10 @@ export async function createPayrollPeriod(
     entityType: 'PayrollPeriod',
     entityId: period.id,
     entityLabel: `${month}/${year}`,
+    changedFields: [
+      createdField('Period', monthLabel(year, month)),
+      createdField('Payslips generated', created, (n) => String(n)),
+    ],
   })
 
   revalidatePath('/payroll')
@@ -387,6 +392,11 @@ export async function regeneratePayslip(payslipId: string) {
     entityType: 'Payslip',
     entityId: payslipId,
     entityLabel: 'Re-pulled hours',
+    changedFields: [
+      diffField('Regular hours', payslip.regularHours, regularHours, (n) => n.toFixed(1)),
+      diffField('Overtime hours', payslip.overtimeHours, overtimeHours, (n) => n.toFixed(1)),
+      diffField('Net pay', payslip.netPay, calc.netPay, fmt.money),
+    ].filter((c): c is FieldChange => c !== null),
   })
 
   revalidatePath(`/payroll/${payslip.payrollPeriodId}`)
@@ -472,6 +482,13 @@ export async function updatePayslip(
     entityType: 'Payslip',
     entityId: payslipId,
     entityLabel: null,
+    changedFields: [
+      diffField('Regular hours', payslip.regularHours, regularHours, (n) => n.toFixed(1)),
+      diffField('Overtime hours', payslip.overtimeHours, overtimeHours, (n) => n.toFixed(1)),
+      diffField('Deductions', payslip.deductionsAmount, deductionsAmount, fmt.money),
+      diffField('Deductions note', payslip.deductionsNote, deductionsNote),
+      diffField('Net pay', payslip.netPay, calc.netPay, fmt.money),
+    ].filter((c): c is FieldChange => c !== null),
   })
 
   revalidatePath(`/payroll/${payslip.payrollPeriodId}`)
@@ -493,6 +510,7 @@ export async function finalizePayrollPeriod(id: string) {
     entityType: 'PayrollPeriod',
     entityId: period.id,
     entityLabel: `Finalized — ${period.month}/${period.year}`,
+    changedFields: [{ field: 'Status', was: 'Draft', now: 'Finalized' }],
   })
 
   revalidatePath(`/payroll/${id}`)
@@ -513,6 +531,7 @@ export async function unfinalizePayrollPeriod(id: string) {
     entityType: 'PayrollPeriod',
     entityId: period.id,
     entityLabel: `Unfinalized — ${period.month}/${period.year}`,
+    changedFields: [{ field: 'Status', was: 'Finalized', now: 'Draft' }],
   })
 
   revalidatePath(`/payroll/${id}`)

@@ -11,6 +11,9 @@ import {
 import { FinalizeButton } from '@/components/payroll/FinalizeButton'
 import { buttonSecondaryClass } from '@/components/ui/form'
 import { requirePayrollPage } from '@/lib/auth/guard'
+import { findDeletionRecord } from '@/lib/audit-queries'
+import { DeletedRecordNotice } from '@/components/audit/DeletedRecordNotice'
+import { RecordHistoryPanel } from '@/components/audit/RecordHistoryPanel'
 
 export default async function PayrollPeriodDetailPage({
   params,
@@ -21,7 +24,15 @@ export default async function PayrollPeriodDetailPage({
   const { id } = await params
   const period = await loadPayrollPeriod(id)
 
-  if (!period) notFound()
+  if (!period) {
+    const deletion = await findDeletionRecord('PayrollPeriod', id)
+    if (deletion) {
+      return (
+        <DeletedRecordNotice entityTypeLabel="Payroll period" entityLabel={deletion.entityLabel} />
+      )
+    }
+    notFound()
+  }
 
   const isFinalized = period.status === 'FINALIZED'
   const totalNet = period.payslips.reduce((sum, p) => sum + p.netPay, 0)
@@ -152,6 +163,8 @@ export default async function PayrollPeriodDetailPage({
           </tbody>
         </table>
       </div>
+
+      <RecordHistoryPanel entityType="PayrollPeriod" entityId={period.id} />
     </div>
   )
 }

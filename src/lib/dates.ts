@@ -105,3 +105,31 @@ export function workingDayCount(start: Date, end: Date): number {
 export function dayBefore(date: Date): Date {
   return new Date(date.getTime() - MS_PER_DAY)
 }
+
+/**
+ * For real TIMESTAMPS (audit log entries, not the date-only values the
+ * rest of this file is about) — "Today 09:21" / "Yesterday 16:48" /
+ * "19 Aug 09:04", with a muted second line (the full date for
+ * today/yesterday, just the year for anything older — matches how a
+ * dense log reads: recent entries need the date spelled out, old ones
+ * mostly need the year for orientation). Computed in UTC like everything
+ * else here — a "Today" boundary that shifted per viewer's timezone would
+ * make two people looking at the same row disagree about what it says.
+ */
+export function formatRelativeDateTime(
+  date: Date,
+  now: Date = new Date(),
+): { relative: string; exact: string } {
+  const time = `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`
+  const dayStart = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+  const diffDays = Math.round((dayStart(now) - dayStart(date)) / MS_PER_DAY)
+
+  if (diffDays === 0) return { relative: `Today ${time}`, exact: formatDate(date) }
+  if (diffDays === 1) return { relative: `Yesterday ${time}`, exact: formatDate(date) }
+
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  return {
+    relative: `${day} ${MONTHS[date.getUTCMonth()]} ${time}`,
+    exact: String(date.getUTCFullYear()),
+  }
+}

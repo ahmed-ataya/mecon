@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { db } from '../db'
 import { equipmentSchema, fieldErrors } from '../validation'
 import { requireDelete, requireWrite } from '../auth/guard'
-import { logAudit } from '../audit'
+import { createdField, deletedField, diffField, logAudit } from '../audit'
 
 /** `values` echoes the submitted form back on failure — see actions/customers.ts */
 export type ActionState = {
@@ -51,6 +51,14 @@ export async function createEquipment(
     entityType: 'Equipment',
     entityId: equipment.id,
     entityLabel: equipment.name,
+    changedFields: [
+      createdField('Name', equipment.name),
+      createdField('Type', equipment.type),
+      createdField('Brand', equipment.brand),
+      createdField('Model', equipment.model),
+      createdField('Plate number', equipment.plateNumber),
+      createdField('Serial number', equipment.serialNumber),
+    ],
   })
 
   revalidatePath('/equipment')
@@ -71,6 +79,7 @@ export async function updateEquipment(
     return { errors: fieldErrors(parsed.error), values }
   }
 
+  const before = await db.equipment.findUnique({ where: { id } })
   const equipment = await db.equipment.update({ where: { id }, data: parsed.data })
 
   await logAudit({
@@ -79,6 +88,14 @@ export async function updateEquipment(
     entityType: 'Equipment',
     entityId: equipment.id,
     entityLabel: equipment.name,
+    changedFields: [
+      diffField('Name', before?.name, equipment.name),
+      diffField('Type', before?.type, equipment.type),
+      diffField('Brand', before?.brand, equipment.brand),
+      diffField('Model', before?.model, equipment.model),
+      diffField('Plate number', before?.plateNumber, equipment.plateNumber),
+      diffField('Serial number', before?.serialNumber, equipment.serialNumber),
+    ].filter((c) => c !== null),
   })
 
   revalidatePath('/equipment')
@@ -109,6 +126,12 @@ export async function deleteEquipment(id: string) {
     entityType: 'Equipment',
     entityId: equipment.id,
     entityLabel: equipment.name,
+    changedFields: [
+      deletedField('Name', equipment.name),
+      deletedField('Type', equipment.type),
+      deletedField('Plate number', equipment.plateNumber),
+      deletedField('Serial number', equipment.serialNumber),
+    ],
   })
 
   revalidatePath('/equipment')

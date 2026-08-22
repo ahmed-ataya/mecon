@@ -14,6 +14,9 @@ import { CompletenessCard } from '@/components/documents/CompletenessBar'
 import { DocumentsSection } from '@/components/documents/DocumentsSection'
 import { WarningList } from '@/components/contracts/WarningList'
 import { buttonSecondaryClass } from '@/components/ui/form'
+import { findDeletionRecord } from '@/lib/audit-queries'
+import { DeletedRecordNotice } from '@/components/audit/DeletedRecordNotice'
+import { RecordHistoryPanel } from '@/components/audit/RecordHistoryPanel'
 
 export default async function EquipmentDetailPage({
   params,
@@ -27,7 +30,15 @@ export default async function EquipmentDetailPage({
     include: { documents: { include: { approvedFor: true } } },
   })
 
-  if (!equipment) notFound()
+  if (!equipment) {
+    const deletion = await findDeletionRecord('Equipment', id)
+    if (deletion) {
+      return (
+        <DeletedRecordNotice entityTypeLabel="Equipment" entityLabel={deletion.entityLabel} />
+      )
+    }
+    notFound()
+  }
 
   const status = rollUpStatus(equipment.documents)
   const { expired, expiringSoon } = summarizeStatuses(equipment.documents)
@@ -139,6 +150,8 @@ export default async function EquipmentDetailPage({
         ownerId={equipment.id}
         documents={documents}
       />
+
+      <RecordHistoryPanel entityType="Equipment" entityId={equipment.id} />
     </div>
   )
 }

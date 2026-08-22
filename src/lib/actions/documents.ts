@@ -6,7 +6,7 @@ import { db } from '../db'
 import { documentSchema, fieldErrors } from '../validation'
 import { THIRD_PARTY_CERTIFICATE, type OwnerType } from '../enums'
 import { requireDelete, requireWrite } from '../auth/guard'
-import { logAudit } from '../audit'
+import { createdField, deletedField, diffField, fmt, logAudit } from '../audit'
 
 /**
  * `values` echoes the submitted form back on failure. React resets a form once
@@ -118,6 +118,16 @@ export async function createDocument(
     entityType: 'Document',
     entityId: document.id,
     entityLabel: fields.documentType,
+    // File NAMES only, never the fileUrl (a live Blob pointer, not data —
+    // but still not something the log needs to remember; see AuditLog's
+    // model comment on storage discipline).
+    changedFields: [
+      createdField('Document type', document.documentType),
+      createdField('Document number', document.documentNumber),
+      createdField('Expiry date', document.expiryDate, fmt.date),
+      createdField('Applicable', document.isApplicable, fmt.bool),
+      createdField('File', document.fileName),
+    ],
   })
 
   revalidatePath(`/${OWNER_PATH[ownerType]}/${ownerId}`)
@@ -143,10 +153,18 @@ export async function updateDocument(
 
   // Read before the write so a changed or cleared file has an old URL to
   // clean up afterward — once the update below lands, the row no longer
-  // points at it and it would otherwise sit in Blob storage forever.
+  // points at it and it would otherwise sit in Blob storage forever. Also
+  // what the audit diff below compares against.
   const existing = await db.document.findUnique({
     where: { id },
-    select: { fileUrl: true },
+    select: {
+      fileUrl: true,
+      fileName: true,
+      documentType: true,
+      documentNumber: true,
+      expiryDate: true,
+      isApplicable: true,
+    },
   })
 
   // Approval bodies are a join table, so the set is replaced rather than
@@ -178,6 +196,13 @@ export async function updateDocument(
     entityType: 'Document',
     entityId: id,
     entityLabel: fields.documentType,
+    changedFields: [
+      diffField('Document type', existing?.documentType, fields.documentType),
+      diffField('Document number', existing?.documentNumber, fields.documentNumber),
+      diffField('Expiry date', existing?.expiryDate, fields.expiryDate, fmt.date),
+      diffField('Applicable', existing?.isApplicable, fields.isApplicable, fmt.bool),
+      diffField('File', existing?.fileName, fields.fileName),
+    ].filter((c) => c !== null),
   })
 
   revalidatePath(`/${OWNER_PATH[ownerType]}/${ownerId}`)
@@ -200,6 +225,12 @@ export async function deleteDocument(id: string) {
     entityType: 'Document',
     entityId: document.id,
     entityLabel: document.documentType,
+    changedFields: [
+      deletedField('Document type', document.documentType),
+      deletedField('Document number', document.documentNumber),
+      deletedField('Expiry date', document.expiryDate, fmt.date),
+      deletedField('File', document.fileName),
+    ],
   })
 
   const ownerType = document.ownerType as OwnerType

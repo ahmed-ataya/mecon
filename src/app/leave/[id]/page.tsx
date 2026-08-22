@@ -11,6 +11,9 @@ import {
 } from '@/lib/actions/leave'
 import { DecisionForm } from '@/components/leave/DecisionForm'
 import { buttonSecondaryClass } from '@/components/ui/form'
+import { findDeletionRecord } from '@/lib/audit-queries'
+import { DeletedRecordNotice } from '@/components/audit/DeletedRecordNotice'
+import { RecordHistoryPanel } from '@/components/audit/RecordHistoryPanel'
 
 export default async function LeaveRequestDetailPage({
   params,
@@ -23,7 +26,15 @@ export default async function LeaveRequestDetailPage({
     loadPublicHolidays(),
   ])
 
-  if (!request) notFound()
+  if (!request) {
+    const deletion = await findDeletionRecord('LeaveRequest', id)
+    if (deletion) {
+      return (
+        <DeletedRecordNotice entityTypeLabel="Leave request" entityLabel={deletion.entityLabel} />
+      )
+    }
+    notFound()
+  }
 
   const days = leaveDaysConsumed(
     request.leaveType as LeaveType,
@@ -104,6 +115,8 @@ export default async function LeaveRequestDetailPage({
           </button>
         </form>
       )}
+
+      <RecordHistoryPanel entityType="LeaveRequest" entityId={request.id} />
     </div>
   )
 }

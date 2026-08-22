@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { db } from '../db'
 import { fieldErrors, lpoSchema } from '../validation'
 import { requireDelete, requireWrite } from '../auth/guard'
-import { logAudit } from '../audit'
+import { createdField, deletedField, diffField, fmt, logAudit } from '../audit'
 
 /** `values` echoes the submitted form back on failure — see actions/customers.ts */
 export type ActionState = {
@@ -55,6 +55,12 @@ export async function createLpo(
     entityType: 'Lpo',
     entityId: lpo.id,
     entityLabel: lpo.number,
+    changedFields: [
+      createdField('Number', lpo.number),
+      createdField('Amount', lpo.amount, fmt.money),
+      createdField('Validity', lpo.validity, fmt.date),
+      createdField('Issued date', lpo.issuedDate, fmt.date),
+    ],
   })
 
   revalidatePath('/lpos')
@@ -85,6 +91,7 @@ export async function updateLpo(
     }
   }
 
+  const before = await db.lpo.findUnique({ where: { id } })
   const lpo = await db.lpo.update({ where: { id }, data: parsed.data })
 
   await logAudit({
@@ -93,6 +100,12 @@ export async function updateLpo(
     entityType: 'Lpo',
     entityId: lpo.id,
     entityLabel: lpo.number,
+    changedFields: [
+      diffField('Number', before?.number, lpo.number),
+      diffField('Amount', before?.amount, lpo.amount, fmt.money),
+      diffField('Validity', before?.validity, lpo.validity, fmt.date),
+      diffField('Issued date', before?.issuedDate, lpo.issuedDate, fmt.date),
+    ].filter((c) => c !== null),
   })
 
   revalidatePath('/lpos')
@@ -122,6 +135,11 @@ export async function deleteLpo(id: string) {
     entityType: 'Lpo',
     entityId: lpo.id,
     entityLabel: lpo.number,
+    changedFields: [
+      deletedField('Number', lpo.number),
+      deletedField('Amount', lpo.amount, fmt.money),
+      deletedField('Validity', lpo.validity, fmt.date),
+    ],
   })
 
   revalidatePath('/lpos')

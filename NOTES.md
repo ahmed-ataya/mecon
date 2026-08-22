@@ -129,6 +129,80 @@ is mostly selects** — site, rate type, assignment reason, plus the searchable
 customer/equipment/operator pickers — so every one of them needs this treatment
 or the same class of bug returns.
 
+## Audit diffs are formatted at write time, not read time
+
+`AuditLog.changedFields` stores `{ field, was, now }[]`, and `was`/`now` are
+already-formatted display strings (`formatQar(3800_00)` → `"QAR 38.00"`,
+not the raw `380000`) at the moment `logAudit()` is called — not raw values
+reformatted when the audit page later renders them.
+
+This is deliberate, not an oversight: a stored diff must never reword itself
+retroactively if a formatter's output format changes later (say `formatQar`
+starts showing a currency symbol). An audit trail that can silently rewrite
+its own history defeats the point of keeping one. The cost is that
+`src/lib/audit.ts`'s `diffField`/`createdField`/`fmt` helpers have to be
+called at every write site instead of centralizing formatting in one place
+— accepted on purpose.
+
+`CREATE` stores `was: null`; `DELETE` stores `now: null` — deliberately the
+same two-value shape as `CREATE`, not a third shape, so `DiffTable` only
+needs to branch on "one value" vs "two values," not on the action.
+
+## Audit payloads: what's safe to log, what never gets logged
+
+- Truncated to 200 characters (`MAX_FIELD_LENGTH` in `src/lib/audit.ts`) —
+  long free-text fields (notes, remarks) get a diff entry, not their full
+  contents.
+- File contents and URLs are never stored: `documents.ts` logs a document's
+  `fileName`, never its `fileUrl` (a Vercel Blob URL is itself a bearer
+  credential — logging it would let anyone with audit-log read access
+  download the file).
+- Passwords are never stored, in any form: `users.ts` logs only a
+  `{ field: 'Password', was: null, now: 'Reset' }` marker when a new
+  password was set, never the value.
+- Not every column — meaningful fields only. A timesheet day-row edit logs
+  "Total working hours: 240 → 236," not one diff row per day. Deciding
+  "meaningful" is a per-action-file judgment call, not a rule a linter could
+  enforce; if a field feels worth showing a human reviewing the log, it's
+  worth diffing.
+
+## Model names and record links are centralized, not per-page
+
+`src/lib/audit-model.ts`'s `humanizeModelName` (`"PayrollPeriod"` → `"Payroll
+period"`) and `recordHref` (`entityType` → that record's own detail-page URL,
+or `null` for `DELETE` rows and models with no standalone page) are the only
+place either translation happens. Both the audit log list and every record's
+own "Change history" panel (`RecordHistoryPanel`) import from here — adding
+a new auditable model means adding one entry to `MODEL_LABELS`/`RECORD_HREF`
+here, not touching both call sites separately and risking them drifting
+apart (one says "Payroll Period," the other says "Payroll period").
+
+## Resetting React state when props change — remount via `key`, not an effect
+
+`useState(initialValue)` only reads `initialValue` on first mount. A parent
+re-render that passes new props does **not** reset already-mounted state —
+this bit twice in the audit/shell work: `Sidebar`'s mobile nav needed to
+close when the route changed, and `AuditEntryList`'s row list needed to
+reset when the URL filters changed (typing a search term updated the URL
+and the server-computed count, but the visible rows silently kept the old
+filtered set — a real bug, caught live).
+
+`useEffect(() => setOpen(false), [pathname])` looks like the obvious fix but
+trips the `react-hooks/set-state-in-effect` lint rule and is one render
+behind besides. Two fixes, matched to the situation:
+
+- **Full remount**: give the component a `key` tied to whatever should reset
+  it — `key={JSON.stringify(filters)}` on `<AuditEntryList>` in
+  `src/app/admin/audit/page.tsx`. React tears down and reinitializes state
+  from scratch. Right when the component has no state worth preserving
+  across the change (an accumulated "Load more" list should be discarded on
+  a new filter anyway).
+- **Adjust state during render**: track the previous value of the prop being
+  watched and compare on every render, calling `setState` conditionally in
+  the render body itself (not inside an effect) — see `Sidebar.tsx`'s
+  `trackedPathname` pattern. Right when the component has other state that
+  should survive.
+
 ## Prisma 7 specifics
 
 Prisma 7 removed `url` from the schema's `datasource` block. The connection
@@ -136,6 +210,38 @@ string now lives in `prisma.config.ts` for migrations, and is passed to a
 driver adapter at runtime in `src/lib/db.ts`. Prisma 7 also no longer loads
 `.env` automatically — `prisma.config.ts` and `prisma/seed.ts` both import
 `dotenv/config` themselves.
+
+## Creating an isolated Neon branch for feature work
+
+`npx neonctl@latest` works without a global install. It needs an API key
+(Neon console → account settings → API keys), passed as `--api-key` or
+via `NEON_API_KEY` — kept in `.env` (gitignored), never in chat or in a
+committed file. `neonctl projects list --api-key "$KEY"` prompts
+interactively for an org unless you also pass `--org-id`; get the org id
+from that same prompt's output or the Neon console's URL.
+
+This project's Neon org has two projects; **`Mecon-dev`**
+(`misty-recipe-07429781`) is the one `.env`'s `DATABASE_URL` points at —
+confirm by matching the `proxy_host` in `projects list` output against the
+host in the current `DATABASE_URL`. Its only branch, `production`
+(`br-rapid-frost-axh01e2v`), is the shared local-dev database everyone's
+local `.env` already points at by default — not the deployed site's own
+database (a separate concern; see `.env`'s own warning comment), but still
+shared across whoever's doing local dev at the time.
+
+To fork off it for isolated feature work:
+
+```bash
+npx neonctl@latest branches create --api-key "$NEON_API_KEY" \
+  --project-id misty-recipe-07429781 --name <branch-name> --parent production
+```
+
+The response includes a ready-to-use pooled connection string
+(`...-pooler.c-4.us-east-2.aws.neon.tech`). Swap it into `.env`'s
+`DATABASE_URL`, keeping the old value commented alongside it for an easy
+revert. A fresh branch inherits the parent's full schema and data as of
+that moment — `npx prisma migrate status` should read "up to date"
+immediately, with no need to re-run migrations.
 
 ## Commands
 

@@ -13,6 +13,9 @@ import { DocumentsSection } from '@/components/documents/DocumentsSection'
 import { buttonSecondaryClass } from '@/components/ui/form'
 import { requirePageUser } from '@/lib/auth/guard'
 import { canDelete, canWrite } from '@/lib/permissions'
+import { findDeletionRecord } from '@/lib/audit-queries'
+import { DeletedRecordNotice } from '@/components/audit/DeletedRecordNotice'
+import { RecordHistoryPanel } from '@/components/audit/RecordHistoryPanel'
 
 export default async function CustomerDetailPage({
   params,
@@ -27,7 +30,15 @@ export default async function CustomerDetailPage({
     include: { documents: { include: { approvedFor: true } } },
   })
 
-  if (!customer) notFound()
+  if (!customer) {
+    const deletion = await findDeletionRecord('Customer', id)
+    if (deletion) {
+      return (
+        <DeletedRecordNotice entityTypeLabel="Customer" entityLabel={deletion.entityLabel} />
+      )
+    }
+    notFound()
+  }
 
   const status = rollUpStatus(customer.documents)
   const { expired, expiringSoon } = summarizeStatuses(customer.documents)
@@ -118,6 +129,8 @@ export default async function CustomerDetailPage({
         canWrite={canWrite(currentUser.role)}
         canDelete={canDelete(currentUser.role)}
       />
+
+      <RecordHistoryPanel entityType="Customer" entityId={customer.id} />
     </div>
   )
 }

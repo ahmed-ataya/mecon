@@ -1,73 +1,99 @@
+import Link from 'next/link'
 import { requireAuditPage } from '@/lib/auth/guard'
-import { db } from '@/lib/db'
+import {
+  AUDIT_RANGE_LABELS,
+  isAuditFiltersDirty,
+  loadAuditEntries,
+  loadAuditFilterOptions,
+  parseAuditFilters,
+} from '@/lib/audit-queries'
+import { AuditFilterBar } from '@/components/audit/AuditFilterBar'
+import { AuditEntryList } from '@/components/audit/AuditEntryList'
+import { PageHeader } from '@/components/shell/PageHeader'
+import { buttonSecondaryClass } from '@/components/ui/form'
 
-const ACTION_CLASSES: Record<string, string> = {
-  CREATE: 'bg-green-50 text-green-700 ring-green-200',
-  UPDATE: 'bg-amber-50 text-amber-700 ring-amber-200',
-  DELETE: 'bg-red-50 text-red-700 ring-red-200',
-}
-
-/** Latest 200 entries — this is a record-of-record, not a paginated
- * archive browser. Revisit with real filters/pagination if the log grows
- * large enough that 200 stops being enough context. */
-export default async function AuditLogPage() {
+export default async function AuditLogPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   await requireAuditPage()
 
-  const entries = await db.auditLog.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: 200,
-  })
+  const rawParams = await searchParams
+  const filters = parseAuditFilters(rawParams)
+  const dirty = isAuditFiltersDirty(filters)
+
+  const [{ entries, total, hasMore }, { users, types }] = await Promise.all([
+    loadAuditEntries(filters),
+    loadAuditFilterOptions(),
+  ])
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Audit log</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Every create, edit and delete across the system. Admin only. Most
-          recent {entries.length} entries.
-        </p>
+    <div>
+      <PageHeader
+        title="Audit log"
+        description="Every record created, changed or deleted across Mecon. Visible to admins only."
+        actions={
+          <Link href={buildExportHref(filters)} className={buttonSecondaryClass}>
+            Export CSV
+          </Link>
+        }
+      />
+
+      <AuditFilterBar filters={filters} users={users} types={types} dirty={dirty} />
+
+      <div className="flex items-baseline justify-between gap-4 py-3 text-[12.5px] text-slate-500">
+        <span>
+          Showing <strong className="font-mono font-medium text-slate-700">{entries.length}</strong> of{' '}
+          <strong className="font-mono font-medium text-slate-700">{total.toLocaleString()}</strong> changes
+          {' · '}
+          {AUDIT_RANGE_LABELS[filters.range]}
+        </span>
+        {entries.length > 0 && <span className="hidden sm:inline">Click a row to see what changed</span>}
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-4 py-3 font-medium">When</th>
-              <th className="px-4 py-3 font-medium">Who</th>
-              <th className="px-4 py-3 font-medium">Action</th>
-              <th className="px-4 py-3 font-medium">Record</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {entries.map((entry) => (
-              <tr key={entry.id}>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                  {entry.createdAt.toISOString().replace('T', ' ').slice(0, 19)}
-                </td>
-                <td className="px-4 py-3 text-slate-900">{entry.userName}</td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${ACTION_CLASSES[entry.action] ?? 'bg-slate-100 text-slate-600 ring-slate-200'}`}
-                  >
-                    {entry.action}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-slate-600">
-                  <span className="font-medium text-slate-900">{entry.entityType}</span>
-                  {entry.entityLabel && ` — ${entry.entityLabel}`}
-                </td>
-              </tr>
-            ))}
-            {entries.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
-                  Nothing logged yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {entries.length === 0 ? (
+        <div className="my-5 rounded-lg border border-dashed border-slate-200 px-5 py-11 text-center">
+          {total === 0 && !dirty ? (
+            <p className="text-sm text-slate-500">
+              No changes recorded yet. Activity will appear here as records are created and
+              edited.
+            </p>
+          ) : (
+            <>
+              <p className="mb-3.5 text-sm text-slate-500">No changes match these filters.</p>
+              <Link href="/admin/audit" className={buttonSecondaryClass}>
+                Clear filters
+              </Link>
+            </>
+          )}
+        </div>
+      ) : (
+        <AuditEntryList
+          // Remounts on every filter change — the "Load more" state this
+          // component keeps locally must never survive a new filtered
+          // query, so a key tied to the actual filters (not just a
+          // stable component identity) is the fix, not an effect that
+          // resyncs state after the fact.
+          key={JSON.stringify(filters)}
+          initialEntries={entries.map((e) => ({ ...e, createdAt: e.createdAt.toISOString() }))}
+          initialHasMore={hasMore}
+          filters={filters}
+        />
+      )}
     </div>
   )
+}
+
+function buildExportHref(filters: ReturnType<typeof parseAuditFilters>): string {
+  const params = new URLSearchParams()
+  if (filters.q) params.set('q', filters.q)
+  if (filters.action !== 'ALL') params.set('action', filters.action)
+  if (filters.range !== '30') params.set('range', filters.range)
+  if (filters.from) params.set('from', filters.from)
+  if (filters.to) params.set('to', filters.to)
+  if (filters.user !== 'ALL') params.set('user', filters.user)
+  if (filters.type !== 'ALL') params.set('type', filters.type)
+  const query = params.toString()
+  return `/admin/audit/export${query ? `?${query}` : ''}`
 }

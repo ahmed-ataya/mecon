@@ -960,6 +960,144 @@ not yet re-verified live in the browser under an actual Operations or
 Viewer login post-sweep, since the sweep landed after that check. Worth a
 quick pass before this is called fully done.
 
+### Phase G — App shell, audit log rebuild, and record history ✅ Done
+
+Raised by the user 2026-08-22, outside the original 5-phase plan and
+outside Phase F — a detailed spec covering three parts: a real sidebar
+shell (replacing the old top nav), a full rebuild of the Phase F audit
+log viewer (filters, cursor pagination, CSV export, expandable diffs),
+and a per-record "Change history" panel on every detail page. Delivered
+with a clickable HTML prototype for structure/density/copy reference —
+interpreted as "match structure, not literal markup," so this app's own
+Tailwind/slate conventions were kept rather than the prototype's separate
+CSS custom-property system.
+
+**Decided before building, per the user's own "what's your advice"
+question**: whether to build detailed field-level diff tracking
+(`changedFields`) now, retrofitting all ~40 existing audit call sites, or
+defer it until the audit log actually needed to answer "what changed,"
+not just "that something changed." Recommended building it now — the
+retrofit only gets more expensive as more call sites accumulate, and this
+session already had full context on every one of them. User agreed.
+
+**Data model**: `AuditLog.changedFields Json?` — an array of
+`{ field, was, now }`, each value **already formatted as a display
+string at write time** (via `formatQar`/`formatDate`/etc.), never the raw
+database value reformatted later. Deliberate: a stored diff must never
+reword itself retroactively if formatting logic changes — an audit trail
+that can rewrite its own history defeats the point of having one.
+`CREATE` uses `was: null`; `DELETE` uses `now: null` (the same shape as
+`CREATE`, not a third shape); `UPDATE` uses both. Values are truncated to
+200 characters, and secrets/blobs are never stored — `documents.ts` logs
+`fileName`, never `fileUrl`; `users.ts` logs a `Password: Reset` marker,
+never the password itself. `src/lib/audit.ts` —
+`diffField`/`createdField`/`deletedField` (alias of `createdField`)/`fmt`
+helpers, `logAudit()`.
+
+**Retrofit**: all 11 `src/lib/actions/*.ts` files (~40 functions) now
+pass a `changedFields` array into every `logAudit()` call — meaningful
+fields only, not every column (a timesheet day-row edit logs "Total
+working hours: 240 → 236", not 30 individual day diffs, per the spec's
+own instruction). Pre-existing audit rows written before this migration
+have no `changedFields` and correctly fall back to "No field detail
+recorded for this entry" (`DiffTable`'s `asFieldChanges` type guard)
+rather than crashing — confirmed live against a real pre-retrofit
+UPDATE row (Rajesh Kumar, Employee).
+
+**Shipped**:
+- **App shell** — `src/components/shell/Sidebar.tsx` (client component,
+  grouped nav: Operations / People + Payroll (admin-only) / Yard / Admin,
+  cheap live counts via 3 parallel COUNT queries loaded once in
+  `layout.tsx`, mobile hamburger + slide-over), `PageHeader.tsx`
+  (breadcrumb + title + actions slot), `icons.tsx` (12 hand-drawn stroke
+  icons — no new dependency). Replaces the old top nav in
+  `src/app/layout.tsx`.
+- **Audit log rebuild** (`/admin/audit`) — URL-synced filters (search,
+  action, date range incl. custom, user, record type —
+  `src/lib/audit-queries.ts`'s `parseAuditFilters`/`buildWhere`), cursor-
+  based "Load more" (`loadMoreAuditEntriesQuery`, a real Prisma `cursor`/
+  `skip: 1` seek, not `OFFSET` — stays fast regardless of log size), CSV
+  export of the current filtered set (`/admin/audit/export`), expandable
+  rows showing the field-level diff (`DiffTable`, shared with the record-
+  history panels below so the two views can never drift apart).
+- **Record history panels** — `RecordHistoryPanel`
+  (`src/components/audit/RecordHistoryPanel.tsx`) added to all 10 record
+  detail pages that have one (Contract, Customer, Equipment, Employee,
+  LPO, Invoice, Leave request, Payroll period, Equipment timesheet,
+  Operator timesheet) via `loadRecordHistory(entityType, entityId)`.
+  Shows "No changes recorded for this record yet." when empty — verified
+  live on a machine with no audit history.
+- **Deleted-record handling** — every one of those 10 pages' `notFound()`
+  now checks `findDeletionRecord(entityType, entityId)` first; if the id
+  was real but the record was deleted, shows "This record was deleted.
+  Its last known values are still in the audit log." (`DeletedRecordNotice`)
+  with a link back to the audit log, instead of a bare 404.
+- `src/lib/audit-model.ts` — `humanizeModelName`/`recordHref`/
+  `AUDIT_ACTION_LABELS`, shared by both the audit list and every history
+  panel so a model name or record link can never read differently in two
+  places.
+
+**Verified live in the browser**: created a real customer ("UI Diff Test
+Co"), confirmed its CREATE diff rendered correctly in both the audit log
+row and its own detail page's history panel, confirmed the record-name
+link resolved to the real detail-page URL, confirmed filtering by search
+text correctly narrowed the visible row list (see bug below), confirmed
+the zero-history and pre-retrofit-no-detail states both render their
+correct fallback text, and (after the Neon branch fix below) confirmed
+the deleted-record path itself — created and deleted a second test
+customer for this specifically, since it's a genuinely new code path (an
+early return before the rest of the page renders) not exercised by
+anything else in the codebase yet; `DeletedRecordNotice` rendered
+correctly with the record's last-known name. Both test customers and
+their audit rows removed afterward via one-off scripts, not left in the
+database.
+
+**Real bug found and fixed during verification**: `AuditEntryList`
+(Client Component) held its row list in `useState(initialEntries)`,
+initialized once — a server re-render passing new filtered
+`initialEntries` props does not reset already-mounted local state, a
+classic React stale-derived-state pitfall. Typing a search term
+correctly updated the URL and the server-computed "Showing N of M" count,
+but the visible row list stayed unchanged. Fixed with
+`key={JSON.stringify(filters)}` on `<AuditEntryList>` in `page.tsx`,
+forcing a full remount (and therefore a fresh `useState`) on every filter
+change — correct anyway, since any accumulated "Load more" state should
+be discarded on a new filter.
+
+**Known gap — breadcrumb rollout is not app-wide.** `PageHeader` (the
+shell's breadcrumb + title component) is only wired into the audit log
+page so far. The other ~25-30 existing list/detail pages still use their
+original inline `<h1>` + back-link pattern from before this phase. Same
+category of gap as Phase F's UI-button-hiding rollout: a UX consistency
+gap, not a functional one — every page still works, it just doesn't all
+look the same yet.
+
+Not yet committed — built on `feat/shell-audit-ux`.
+
+**Neon branch isolation — caught late, then fixed.** The original
+instruction was to create a matching Neon database branch before
+starting so this work wouldn't touch shared data; no Neon CLI/API
+credentials were available at the time, so that step was silently
+skipped and all of Stage 1-5's migrations and test writes (see below)
+actually ran against the `production` branch of the `Mecon-dev` Neon
+project — the same database other local dev already uses (not the
+deployed site's own database — `.env`'s own warning comment already
+distinguished the two — but still not the isolated branch that was
+promised). Caught while writing this ROADMAP entry, before the false
+claim shipped; flagged to the user directly rather than left implicit.
+Fixed same session: user supplied a `NEON_API_KEY` via `.env` (gitignored,
+key never appears in chat), used to create a real branch —
+`feat/shell-audit-ux` (`br-lucky-union-ax6wlmfd`), forked off
+`production` — via `neonctl branches create`. `.env`'s `DATABASE_URL` now
+points at that branch's own connection string (the shared-branch URL is
+kept commented alongside it for an easy revert). `npx prisma migrate
+status` confirmed the new branch already carries all 15 migrations
+(inherited at fork time, including this phase's own
+`audit_field_diffs`), and the app was reloaded against it and re-verified
+live. Net effect: the migration and the now-deleted test customer did
+touch the shared dev database before this fix landed, but nothing
+destructive happened and no further work will.
+
 ### Qatar-specific items — confirm with client before building
 
 - **End of service gratuity** — accrued liability per employee (E4, above).

@@ -6,7 +6,8 @@ import { db } from '../db'
 import { fieldErrors, operatorSchema } from '../validation'
 import { requireDelete, requireWrite } from '../auth/guard'
 import { canViewPayroll } from '../permissions'
-import { logAudit } from '../audit'
+import { createdField, deletedField, diffField, fmt, type FieldChange, logAudit } from '../audit'
+import { EMPLOYEE_CATEGORY_LABELS, type EmployeeCategory } from '../enums'
 
 /** `values` echoes the submitted form back on failure — see actions/customers.ts */
 export type ActionState = {
@@ -124,6 +125,23 @@ export async function createOperator(
     entityType: 'Employee',
     entityId: operator.id,
     entityLabel: operator.name,
+    // Payroll fields included on purpose — the audit log is Admin-only,
+    // same audience as payroll itself, and a non-Admin can never reach
+    // this branch with payroll fields set in the first place (see
+    // stripPayrollFields above).
+    changedFields: [
+      createdField('Name', operator.name),
+      createdField('Employee number', operator.employeeNumber),
+      createdField('Job title', operator.jobTitle),
+      createdField(
+        'Category',
+        operator.category as EmployeeCategory,
+        (c) => EMPLOYEE_CATEGORY_LABELS[c],
+      ),
+      createdField('Machines qualified', qualifiedTypes.join(', ') || null),
+      createdField('Basic salary', operator.basicSalary, fmt.money),
+      createdField('Bank', operator.bankName),
+    ],
   })
 
   revalidatePath('/operators')
@@ -150,6 +168,11 @@ export async function updateOperator(
 
   const data = canViewPayroll(user.role) ? parsed.data : stripPayrollFields(parsed.data)
 
+  const before = await db.employee.findUnique({
+    where: { id },
+    include: { qualifications: true },
+  })
+
   // Nested write, not a $transaction — see updateDocument's approvedFor for
   // why: Neon's pooled connection plus a cold start pushed $transaction past
   // its start timeout here before.
@@ -164,12 +187,47 @@ export async function updateOperator(
     },
   })
 
+  const beforeQualified = (before?.qualifications ?? [])
+    .map((q) => q.equipmentType)
+    .sort()
+    .join(', ')
+  const afterQualified = [...qualifiedTypes].sort().join(', ')
+
+  const changedFields: FieldChange[] = [
+    diffField('Name', before?.name, operator.name),
+    diffField('Employee number', before?.employeeNumber, operator.employeeNumber),
+    diffField('Job title', before?.jobTitle, operator.jobTitle),
+    diffField(
+      'Category',
+      before?.category as EmployeeCategory | undefined,
+      operator.category as EmployeeCategory,
+      (c) => EMPLOYEE_CATEGORY_LABELS[c],
+    ),
+    diffField('Machines qualified', beforeQualified || null, afterQualified || null),
+  ].filter((c): c is FieldChange => c !== null)
+
+  // Same audience reasoning as createOperator above — payroll fields are
+  // only ever present here when an Admin made the change.
+  if (canViewPayroll(user.role)) {
+    const payrollChanges = [
+      diffField('Basic salary', before?.basicSalary, operator.basicSalary, fmt.money),
+      diffField('Bank', before?.bankName, operator.bankName),
+      diffField(
+        'IBAN / wage card',
+        before?.bankAccountNumber,
+        operator.bankAccountNumber,
+      ),
+    ].filter((c): c is FieldChange => c !== null)
+    changedFields.push(...payrollChanges)
+  }
+
   await logAudit({
     user,
     action: 'UPDATE',
     entityType: 'Employee',
     entityId: operator.id,
     entityLabel: operator.name,
+    changedFields,
   })
 
   revalidatePath('/operators')
@@ -200,6 +258,15 @@ export async function deleteOperator(id: string) {
     entityType: 'Employee',
     entityId: operator.id,
     entityLabel: operator.name,
+    changedFields: [
+      deletedField('Name', operator.name),
+      deletedField(
+        'Category',
+        operator.category as EmployeeCategory,
+        (c) => EMPLOYEE_CATEGORY_LABELS[c],
+      ),
+      deletedField('Employee number', operator.employeeNumber),
+    ],
   })
 
   revalidatePath('/operators')

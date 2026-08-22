@@ -21,7 +21,7 @@ import { resolveLeaveDaysInRange } from '../leave'
 import type { LeaveType } from '../enums'
 import { fieldErrors, timesheetCreateSchema } from '../validation'
 import { requireWrite } from '../auth/guard'
-import { logAudit } from '../audit'
+import { createdField, diffField, type FieldChange, logAudit } from '../audit'
 
 export type CreateActionState = {
   errors?: Record<string, string>
@@ -235,6 +235,10 @@ export async function createEquipmentTimesheet(
     entityType: 'EquipmentTimesheet',
     entityId: timesheet.id,
     entityLabel: timesheet.referenceNumber,
+    changedFields: [
+      createdField('Period', monthLabel(year, month)),
+      createdField('Days generated', days.length, (n) => String(n)),
+    ],
   })
 
   revalidatePath('/timesheets')
@@ -250,7 +254,7 @@ export async function updateEquipmentTimesheetDays(
 
   const timesheet = await db.equipmentTimesheet.findUnique({
     where: { id: timesheetId },
-    select: { status: true },
+    select: { status: true, days: { select: { workingHours: true } } },
   })
 
   if (!timesheet) return { errors: { form: 'Timesheet not found.' } }
@@ -283,12 +287,21 @@ export async function updateEquipmentTimesheetDays(
     ),
   )
 
+  // Day-by-day detail would be dozens of rows for one save — a total-hours
+  // summary is the meaningful figure here, per AuditLog's own "meaningful
+  // fields, not every column" guidance.
+  const totalBefore = timesheet.days.reduce((sum, d) => sum + d.workingHours, 0)
+  const totalAfter = rows.reduce((sum, r) => sum + r.workingHours, 0)
+
   await logAudit({
     user,
     action: 'UPDATE',
     entityType: 'EquipmentTimesheet',
     entityId: timesheetId,
     entityLabel: null,
+    changedFields: [
+      diffField('Total working hours', totalBefore, totalAfter, (n) => n.toFixed(1)),
+    ].filter((c): c is FieldChange => c !== null),
   })
 
   revalidatePath(`/timesheets/equipment/${timesheetId}`)
@@ -309,6 +322,7 @@ export async function signEquipmentTimesheet(id: string) {
     entityType: 'EquipmentTimesheet',
     entityId: timesheet.id,
     entityLabel: 'Signed',
+    changedFields: [{ field: 'Status', was: 'Draft', now: 'Signed' }],
   })
 
   revalidatePath(`/timesheets/equipment/${id}`)
@@ -329,6 +343,7 @@ export async function unsignEquipmentTimesheet(id: string) {
     entityType: 'EquipmentTimesheet',
     entityId: timesheet.id,
     entityLabel: 'Unsigned',
+    changedFields: [{ field: 'Status', was: 'Signed', now: 'Draft' }],
   })
 
   revalidatePath(`/timesheets/equipment/${id}`)
@@ -439,6 +454,10 @@ export async function createOperatorTimesheet(
     entityType: 'OperatorTimesheet',
     entityId: timesheet.id,
     entityLabel: timesheet.referenceNumber,
+    changedFields: [
+      createdField('Period', monthLabel(year, month)),
+      createdField('Days generated', days.length, (n) => String(n)),
+    ],
   })
 
   revalidatePath('/timesheets')
@@ -454,7 +473,7 @@ export async function updateOperatorTimesheetDays(
 
   const timesheet = await db.operatorTimesheet.findUnique({
     where: { id: timesheetId },
-    select: { status: true },
+    select: { status: true, days: { select: { workingHours: true } } },
   })
 
   if (!timesheet) return { errors: { form: 'Timesheet not found.' } }
@@ -489,12 +508,18 @@ export async function updateOperatorTimesheetDays(
     ),
   )
 
+  const totalBefore = timesheet.days.reduce((sum, d) => sum + d.workingHours, 0)
+  const totalAfter = rows.reduce((sum, r) => sum + r.workingHours, 0)
+
   await logAudit({
     user,
     action: 'UPDATE',
     entityType: 'OperatorTimesheet',
     entityId: timesheetId,
     entityLabel: null,
+    changedFields: [
+      diffField('Total working hours', totalBefore, totalAfter, (n) => n.toFixed(1)),
+    ].filter((c): c is FieldChange => c !== null),
   })
 
   revalidatePath(`/timesheets/operator/${timesheetId}`)
@@ -515,6 +540,7 @@ export async function signOperatorTimesheet(id: string) {
     entityType: 'OperatorTimesheet',
     entityId: timesheet.id,
     entityLabel: 'Signed',
+    changedFields: [{ field: 'Status', was: 'Draft', now: 'Signed' }],
   })
 
   revalidatePath(`/timesheets/operator/${id}`)
@@ -535,6 +561,7 @@ export async function unsignOperatorTimesheet(id: string) {
     entityType: 'OperatorTimesheet',
     entityId: timesheet.id,
     entityLabel: 'Unsigned',
+    changedFields: [{ field: 'Status', was: 'Signed', now: 'Draft' }],
   })
 
   revalidatePath(`/timesheets/operator/${id}`)

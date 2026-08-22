@@ -11,6 +11,9 @@ import {
 import { DailyRowsTable } from '@/components/timesheets/DailyRowsTable'
 import { SignButton } from '@/components/timesheets/SignButton'
 import { buttonSecondaryClass } from '@/components/ui/form'
+import { findDeletionRecord } from '@/lib/audit-queries'
+import { DeletedRecordNotice } from '@/components/audit/DeletedRecordNotice'
+import { RecordHistoryPanel } from '@/components/audit/RecordHistoryPanel'
 
 export default async function EquipmentTimesheetDetailPage({
   params,
@@ -20,7 +23,18 @@ export default async function EquipmentTimesheetDetailPage({
   const { id } = await params
   const timesheet = await loadEquipmentTimesheet(id)
 
-  if (!timesheet) notFound()
+  if (!timesheet) {
+    const deletion = await findDeletionRecord('EquipmentTimesheet', id)
+    if (deletion) {
+      return (
+        <DeletedRecordNotice
+          entityTypeLabel="Equipment timesheet"
+          entityLabel={deletion.entityLabel}
+        />
+      )
+    }
+    notFound()
+  }
 
   const { equipment, contract } = timesheet.equipmentAssignment
   const isSigned = timesheet.status === 'SIGNED'
@@ -100,6 +114,8 @@ export default async function EquipmentTimesheetDetailPage({
         showOvertimeSplit={false}
         readOnly={isSigned}
       />
+
+      <RecordHistoryPanel entityType="EquipmentTimesheet" entityId={timesheet.id} />
     </div>
   )
 }

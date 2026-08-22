@@ -12,6 +12,9 @@ import {
 import { DailyRowsTable } from '@/components/timesheets/DailyRowsTable'
 import { SignButton } from '@/components/timesheets/SignButton'
 import { buttonSecondaryClass } from '@/components/ui/form'
+import { findDeletionRecord } from '@/lib/audit-queries'
+import { DeletedRecordNotice } from '@/components/audit/DeletedRecordNotice'
+import { RecordHistoryPanel } from '@/components/audit/RecordHistoryPanel'
 
 export default async function OperatorTimesheetDetailPage({
   params,
@@ -21,7 +24,18 @@ export default async function OperatorTimesheetDetailPage({
   const { id } = await params
   const timesheet = await loadOperatorTimesheet(id)
 
-  if (!timesheet) notFound()
+  if (!timesheet) {
+    const deletion = await findDeletionRecord('OperatorTimesheet', id)
+    if (deletion) {
+      return (
+        <DeletedRecordNotice
+          entityTypeLabel="Operator timesheet"
+          entityLabel={deletion.entityLabel}
+        />
+      )
+    }
+    notFound()
+  }
 
   const { operator, contract } = timesheet.operatorAssignment
   const isSigned = timesheet.status === 'SIGNED'
@@ -103,6 +117,8 @@ export default async function OperatorTimesheetDetailPage({
         showOvertimeSplit={true}
         readOnly={isSigned}
       />
+
+      <RecordHistoryPanel entityType="OperatorTimesheet" entityId={timesheet.id} />
     </div>
   )
 }

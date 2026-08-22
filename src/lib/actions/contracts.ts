@@ -11,7 +11,7 @@ import {
   operatorAssignmentSchema,
 } from '../validation'
 import { requireWrite } from '../auth/guard'
-import { logAudit } from '../audit'
+import { createdField, diffField, fmt, type FieldChange, logAudit } from '../audit'
 
 /** `values` echoes the submitted form back on failure — see actions/customers.ts */
 export type ActionState = {
@@ -115,6 +115,12 @@ export async function createContract(
     entityType: 'Contract',
     entityId: created.id,
     entityLabel: created.projectName,
+    changedFields: [
+      createdField('Project', created.projectName),
+      createdField('Site', created.siteName),
+      createdField('Mobilisation date', created.mobilizationDate, fmt.date),
+      createdField('Hourly rate', equipment.data.rateAmount, fmt.money),
+    ],
   })
 
   revalidatePath('/contracts')
@@ -134,6 +140,7 @@ export async function updateContract(
     return { errors: fieldErrors(parsed.error), values }
   }
 
+  const before = await db.contract.findUnique({ where: { id } })
   const contract = await db.contract.update({ where: { id }, data: parsed.data })
 
   await logAudit({
@@ -142,6 +149,12 @@ export async function updateContract(
     entityType: 'Contract',
     entityId: contract.id,
     entityLabel: contract.projectName,
+    changedFields: [
+      diffField('Project', before?.projectName, contract.projectName),
+      diffField('Site', before?.siteName, contract.siteName),
+      diffField('Mobilisation date', before?.mobilizationDate, contract.mobilizationDate, fmt.date),
+      diffField('Closing date', before?.closingDate, contract.closingDate, fmt.date),
+    ].filter((c): c is FieldChange => c !== null),
   })
 
   revalidatePath('/contracts')
@@ -196,6 +209,11 @@ export async function replaceEquipment(
     }
   }
 
+  const [outgoingEquipment, incomingEquipment] = await Promise.all([
+    db.equipment.findUnique({ where: { id: outgoing.equipmentId }, select: { name: true } }),
+    db.equipment.findUnique({ where: { id: parsed.data.equipmentId }, select: { name: true } }),
+  ])
+
   await db.$transaction([
     db.equipmentAssignment.update({
       where: { id: assignmentId },
@@ -220,6 +238,11 @@ export async function replaceEquipment(
     entityType: 'Contract',
     entityId: outgoing.contractId,
     entityLabel: 'Machine replaced',
+    changedFields: [
+      diffField('Machine', outgoingEquipment?.name ?? null, incomingEquipment?.name ?? null),
+      diffField('Hourly rate', outgoing.rateAmount, parsed.data.rateAmount, fmt.money),
+      createdField('Start date', parsed.data.startDate, fmt.date),
+    ].filter((c): c is FieldChange => c !== null),
   })
 
   revalidatePath('/contracts')
@@ -246,6 +269,7 @@ export async function endEquipmentAssignment(
     entityType: 'Contract',
     entityId: assignment.contractId,
     entityLabel: 'Equipment assignment ended',
+    changedFields: [createdField('End date', assignment.endDate, fmt.date)],
   })
 
   revalidatePath('/contracts')
@@ -287,6 +311,18 @@ export async function replaceOperator(
     }
   }
 
+  const incomingOperatorId =
+    parsed.data.arrangement === 'WITHOUT_OPERATOR' ? null : parsed.data.operatorId
+
+  const [outgoingOperator, incomingOperator] = await Promise.all([
+    outgoing.operatorId
+      ? db.employee.findUnique({ where: { id: outgoing.operatorId }, select: { name: true } })
+      : null,
+    incomingOperatorId
+      ? db.employee.findUnique({ where: { id: incomingOperatorId }, select: { name: true } })
+      : null,
+  ])
+
   await db.$transaction([
     db.operatorAssignment.update({
       where: { id: assignmentId },
@@ -296,10 +332,7 @@ export async function replaceOperator(
       data: {
         contractId: outgoing.contractId,
         arrangement: parsed.data.arrangement,
-        operatorId:
-          parsed.data.arrangement === 'WITHOUT_OPERATOR'
-            ? null
-            : parsed.data.operatorId,
+        operatorId: incomingOperatorId,
         startDate: parsed.data.startDate,
         reason: parsed.data.reason,
         operatorHourlyCost: parsed.data.operatorHourlyCost,
@@ -314,6 +347,14 @@ export async function replaceOperator(
     entityType: 'Contract',
     entityId: outgoing.contractId,
     entityLabel: 'Operator replaced',
+    changedFields: [
+      diffField(
+        'Operator',
+        outgoingOperator?.name ?? 'Without operator',
+        incomingOperator?.name ?? 'Without operator',
+      ),
+      createdField('Start date', parsed.data.startDate, fmt.date),
+    ].filter((c): c is FieldChange => c !== null),
   })
 
   revalidatePath('/contracts')

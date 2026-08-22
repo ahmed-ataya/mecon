@@ -68,6 +68,74 @@ anything here needed fixing.
 buttons, not a select — included here only so nobody re-checks it looking for
 a missed dropdown.
 
+## App shell (sidebar nav)
+
+- `src/components/shell/Sidebar.tsx` — the nav itself. Groups (Operations /
+  People + Payroll (admin-only item) / Yard / Admin) are a literal array in
+  this file, not database- or config-driven; adding a nav item means editing
+  this array directly.
+- `src/components/shell/PageHeader.tsx` — breadcrumb + `h1` + actions slot.
+  Only wired into `/admin/audit` so far — see ROADMAP.md Phase G's flagged
+  gap; every other page still uses its original inline `<h1>` + back-link.
+- `src/components/shell/icons.tsx` — 12 hand-drawn stroke icons used by the
+  sidebar. No icon-library dependency.
+- Sidebar item counts (e.g. "Contracts 12") come from 3 parallel `COUNT`
+  queries run once in `src/app/layout.tsx`'s `loadSidebarCounts()` — cheap
+  by design, not a full list query.
+
+## Audit trail
+
+- **Schema**: `AuditLog` in `prisma/schema.prisma` — `action`
+  (CREATE/UPDATE/DELETE), `entityType`/`entityId`/`entityLabel`, `userName`,
+  `changedFields Json?` (an array of `{ field, was, now }`, pre-formatted
+  strings — see NOTES.md's "Audit diffs are formatted at write time").
+- **Writing an entry**: `src/lib/audit.ts` — `logAudit()`, plus
+  `diffField`/`createdField`/`deletedField`/`fmt` helpers used at every one
+  of the ~40 call sites across `src/lib/actions/*.ts` (all 11 action files).
+- **Reading entries**: `src/lib/audit-queries.ts` — `loadAuditEntries` (first
+  page), `loadMoreAuditEntriesQuery` (cursor-based "Load more"),
+  `loadAllAuditEntriesForExport` (CSV, no take limit), `loadAuditFilterOptions`
+  (populates the user/type filter selects from what's actually in the log),
+  `loadRecordHistory(entityType, entityId)` (one record's full history, used
+  by `RecordHistoryPanel`), `findDeletionRecord(entityType, entityId)` (used
+  by every detail page's deleted-record fallback).
+- **Display**: `src/lib/audit-model.ts` — `humanizeModelName`, `recordHref`,
+  `AUDIT_ACTION_LABELS`, all centralized here (see NOTES.md). `DiffTable`
+  (`src/components/audit/DiffTable.tsx`) renders the field-level diff and is
+  shared by both the audit log's expandable rows and every record's history
+  panel — one renderer, so the two views can't drift apart.
+- **Audit log page** (`/admin/audit`, Admin only): `page.tsx` +
+  `AuditFilterBar.tsx` (URL-synced filters) + `AuditEntryList.tsx`
+  (expandable rows + "Load more") + `export/route.ts` (CSV of the current
+  filtered set).
+- **Record history panels**: `RecordHistoryPanel`
+  (`src/components/audit/RecordHistoryPanel.tsx`), a Server Component
+  dropped onto a detail page as `<RecordHistoryPanel entityType="X"
+  entityId={id} />`. Wired into all 10 detail pages that have a standalone
+  route and an `entityType`:
+
+  | entityType | Detail page |
+  |---|---|
+  | `Contract` | `src/app/contracts/[id]/page.tsx` |
+  | `Customer` | `src/app/customers/[id]/page.tsx` |
+  | `Equipment` | `src/app/equipment/[id]/page.tsx` |
+  | `Employee` | `src/app/operators/[id]/page.tsx` |
+  | `Lpo` | `src/app/lpos/[id]/page.tsx` |
+  | `Invoice` | `src/app/invoices/[id]/page.tsx` |
+  | `LeaveRequest` | `src/app/leave/[id]/page.tsx` |
+  | `PayrollPeriod` | `src/app/payroll/[id]/page.tsx` |
+  | `EquipmentTimesheet` | `src/app/timesheets/equipment/[id]/page.tsx` |
+  | `OperatorTimesheet` | `src/app/timesheets/operator/[id]/page.tsx` |
+
+  `Document`, `PublicHoliday`, `RamadanPeriod`, `Payslip` and `User` are
+  audited too but have no entry here — the first three live inside their
+  owner's page rather than having a standalone route, `Payslip` and `User`
+  weren't in the original spec's 9-10 pages.
+- **Deleted-record handling**: same 10 pages' `notFound()` branch first
+  checks `findDeletionRecord(entityType, id)`; if the id was real but the
+  record is gone, renders `DeletedRecordNotice`
+  (`src/components/audit/DeletedRecordNotice.tsx`) instead of a bare 404.
+
 ## Money and billing
 
 - **Rate storage**: `EquipmentAssignment.rateAmount` is the HOURLY rate, in

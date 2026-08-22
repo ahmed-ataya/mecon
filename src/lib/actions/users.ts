@@ -5,7 +5,8 @@ import { redirect } from 'next/navigation'
 import { db } from '../db'
 import { hashPassword } from '../auth/password'
 import { requireAdmin } from '../auth/guard'
-import { logAudit } from '../audit'
+import { createdField, deletedField, diffField, type FieldChange, logAudit } from '../audit'
+import { USER_ROLE_LABELS, type UserRole } from '../enums'
 import { fieldErrors, userCreateSchema, userUpdateSchema } from '../validation'
 
 export type ActionState = {
@@ -55,6 +56,13 @@ export async function createUser(
     entityType: 'User',
     entityId: user.id,
     entityLabel: `${user.name} <${user.email}>`,
+    // Never the password itself, hashed or not — see AuditLog's storage
+    // discipline in schema.prisma.
+    changedFields: [
+      createdField('Name', user.name),
+      createdField('Email', user.email),
+      createdField('Role', user.role as UserRole, (r) => USER_ROLE_LABELS[r]),
+    ],
   })
 
   revalidatePath('/admin/users')
@@ -95,6 +103,8 @@ export async function updateUser(
     }
   }
 
+  const before = await db.user.findUnique({ where: { id } })
+
   const user = await db.user.update({
     where: { id },
     data: {
@@ -105,12 +115,30 @@ export async function updateUser(
     },
   })
 
+  const changedFields: FieldChange[] = [
+    diffField('Name', before?.name, user.name),
+    diffField('Email', before?.email, user.email),
+    diffField(
+      'Role',
+      before?.role as UserRole | undefined,
+      user.role as UserRole,
+      (r) => USER_ROLE_LABELS[r],
+    ),
+  ].filter((c): c is FieldChange => c !== null)
+
+  // A password reset is worth recording that it HAPPENED — never the value,
+  // hashed or otherwise.
+  if (parsed.data.password) {
+    changedFields.push({ field: 'Password', was: null, now: 'Reset' })
+  }
+
   await logAudit({
     user: admin,
     action: 'UPDATE',
     entityType: 'User',
     entityId: user.id,
     entityLabel: `${user.name} <${user.email}>`,
+    changedFields,
   })
 
   revalidatePath('/admin/users')
@@ -132,6 +160,11 @@ export async function deleteUser(id: string) {
     entityType: 'User',
     entityId: user.id,
     entityLabel: `${user.name} <${user.email}>`,
+    changedFields: [
+      deletedField('Name', user.name),
+      deletedField('Email', user.email),
+      deletedField('Role', user.role as UserRole, (r) => USER_ROLE_LABELS[r]),
+    ],
   })
 
   revalidatePath('/admin/users')

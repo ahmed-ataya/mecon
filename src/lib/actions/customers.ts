@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { db } from '../db'
 import { customerSchema, fieldErrors } from '../validation'
 import { requireDelete, requireWrite } from '../auth/guard'
-import { logAudit } from '../audit'
+import { createdField, deletedField, diffField, logAudit } from '../audit'
 
 /**
  * `values` echoes the submitted form back on failure. React resets a form once
@@ -50,6 +50,12 @@ export async function createCustomer(
     entityType: 'Customer',
     entityId: customer.id,
     entityLabel: customer.name,
+    changedFields: [
+      createdField('Name', customer.name),
+      createdField('Contact person', customer.contactPerson),
+      createdField('Phone', customer.phone),
+      createdField('Email', customer.email),
+    ],
   })
 
   revalidatePath('/customers')
@@ -70,6 +76,7 @@ export async function updateCustomer(
     return { errors: fieldErrors(parsed.error), values }
   }
 
+  const before = await db.customer.findUnique({ where: { id } })
   const customer = await db.customer.update({ where: { id }, data: parsed.data })
 
   await logAudit({
@@ -78,6 +85,13 @@ export async function updateCustomer(
     entityType: 'Customer',
     entityId: customer.id,
     entityLabel: customer.name,
+    changedFields: [
+      diffField('Name', before?.name, customer.name),
+      diffField('Contact person', before?.contactPerson, customer.contactPerson),
+      diffField('Phone', before?.phone, customer.phone),
+      diffField('Email', before?.email, customer.email),
+      diffField('Notes', before?.notes, customer.notes),
+    ].filter((c) => c !== null),
   })
 
   revalidatePath('/customers')
@@ -106,6 +120,12 @@ export async function deleteCustomer(id: string) {
     entityType: 'Customer',
     entityId: customer.id,
     entityLabel: customer.name,
+    changedFields: [
+      deletedField('Name', customer.name),
+      deletedField('Contact person', customer.contactPerson),
+      deletedField('Phone', customer.phone),
+      deletedField('Email', customer.email),
+    ],
   })
 
   revalidatePath('/customers')

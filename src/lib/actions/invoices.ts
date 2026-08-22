@@ -10,7 +10,7 @@ import {
   nextSystemSequence,
 } from '../invoice-number'
 import { requireDelete, requireWrite } from '../auth/guard'
-import { logAudit } from '../audit'
+import { createdField, deletedField, diffField, fmt, type FieldChange, logAudit } from '../audit'
 
 export type ActionState = {
   errors?: Record<string, string>
@@ -256,6 +256,11 @@ export async function createInvoices(
       entityType: 'Invoice',
       entityId: invoice.id,
       entityLabel: invoice.invoiceNumber,
+      changedFields: [
+        createdField('Amount', invoice.totalAmount, fmt.money),
+        createdField('Period start', invoice.periodStart, fmt.date),
+        createdField('Period end', invoice.periodEnd, fmt.date),
+      ],
     })
   }
 
@@ -305,11 +310,13 @@ export async function updateDraft(
     }
   }
 
+  const newDueDate = parseDateInput(values.dueDate ?? '')
+
   await db.invoice.update({
     where: { id },
     data: {
       invoiceNumber,
-      dueDate: parseDateInput(values.dueDate ?? ''),
+      dueDate: newDueDate,
     },
   })
 
@@ -319,6 +326,10 @@ export async function updateDraft(
     entityType: 'Invoice',
     entityId: id,
     entityLabel: invoiceNumber,
+    changedFields: [
+      diffField('Invoice number', invoice.invoiceNumber, invoiceNumber),
+      diffField('Due date', invoice.dueDate, newDueDate, fmt.date),
+    ].filter((c): c is FieldChange => c !== null),
   })
 
   revalidatePath(`/invoices/${id}`)
@@ -350,6 +361,7 @@ export async function issueInvoice(id: string) {
     entityType: 'Invoice',
     entityId: id,
     entityLabel: `Issued — ${invoice.invoiceNumber}`,
+    changedFields: [{ field: 'Status', was: 'Draft', now: 'Issued' }],
   })
 
   revalidatePath('/invoices')
@@ -370,6 +382,10 @@ export async function markPaid(id: string) {
     entityType: 'Invoice',
     entityId: id,
     entityLabel: `Marked paid — ${invoice.invoiceNumber}`,
+    changedFields: [
+      { field: 'Status', was: 'Issued', now: 'Paid' },
+      createdField('Paid date', invoice.paidDate, fmt.date),
+    ],
   })
 
   revalidatePath('/invoices')
@@ -391,6 +407,7 @@ export async function markUnpaid(id: string) {
     entityType: 'Invoice',
     entityId: id,
     entityLabel: `Marked unpaid — ${invoice.invoiceNumber}`,
+    changedFields: [{ field: 'Status', was: 'Paid', now: 'Issued' }],
   })
 
   revalidatePath('/invoices')
@@ -412,6 +429,10 @@ export async function deleteDraft(id: string) {
     entityType: 'Invoice',
     entityId: invoice.id,
     entityLabel: invoice.invoiceNumber,
+    changedFields: [
+      deletedField('Invoice number', invoice.invoiceNumber),
+      deletedField('Amount', invoice.totalAmount, fmt.money),
+    ],
   })
 
   revalidatePath('/invoices')

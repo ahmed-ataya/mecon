@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { db } from '../db'
 import { fieldErrors, ramadanPeriodSchema } from '../validation'
 import { requirePayrollAccess } from '../auth/guard'
-import { logAudit } from '../audit'
+import { createdField, deletedField, fmt, logAudit } from '../audit'
 
 export type RamadanActionState = {
   errors?: Record<string, string>
@@ -47,6 +47,11 @@ export async function createRamadanPeriod(
     entityType: 'RamadanPeriod',
     entityId: period.id,
     entityLabel: String(period.year),
+    changedFields: [
+      createdField('Year', period.year, fmt.text),
+      createdField('Start date', period.startDate, fmt.date),
+      createdField('End date', period.endDate, fmt.date),
+    ],
   })
 
   revalidatePath('/payroll/ramadan')
@@ -64,6 +69,11 @@ export async function deleteRamadanPeriod(id: string) {
     entityType: 'RamadanPeriod',
     entityId: period.id,
     entityLabel: String(period.year),
+    changedFields: [
+      deletedField('Year', period.year, fmt.text),
+      deletedField('Start date', period.startDate, fmt.date),
+      deletedField('End date', period.endDate, fmt.date),
+    ],
   })
 
   revalidatePath('/payroll/ramadan')

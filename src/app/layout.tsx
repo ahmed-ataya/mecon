@@ -1,9 +1,8 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { getCurrentUser } from '@/lib/auth/session'
-import { canManageUsers, canViewAudit, canViewPayroll } from '@/lib/permissions'
-import { USER_ROLE_LABELS } from '@/lib/enums'
-import { logout } from '@/lib/actions/auth'
+import { db } from '@/lib/db'
+import { todayUtc } from '@/lib/dates'
+import { Sidebar, type SidebarCounts } from '@/components/shell/Sidebar'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -11,19 +10,34 @@ export const metadata: Metadata = {
   description: 'Equipment rental and contracting operations',
 }
 
-// Links are added as each section ships, so the nav never points at a page
-// that does not exist yet. Payroll is filtered separately below — Admin
-// only, see src/lib/permissions.ts.
-const NAV = [
-  { href: '/contracts', label: 'Contracts' },
-  { href: '/invoices', label: 'Invoices' },
-  { href: '/timesheets', label: 'Timesheets' },
-  { href: '/leave', label: 'Leave' },
-  { href: '/lpos', label: 'LPOs' },
-  { href: '/customers', label: 'Customers' },
-  { href: '/equipment', label: 'Equipment' },
-  { href: '/operators', label: 'Employees' },
-]
+/**
+ * The sidebar's nav-item pills — cheap, single-table COUNT queries only.
+ * Nothing here joins or aggregates across tables; if a future count needs
+ * that, it belongs on its own list page, not in the shell that renders on
+ * every request. See NOTES.md's "App shell" section.
+ */
+async function loadSidebarCounts(): Promise<SidebarCounts> {
+  const today = todayUtc()
+
+  const [pendingOperatorTimesheets, pendingEquipmentTimesheets, pendingLeave, activeContracts] =
+    await Promise.all([
+      db.operatorTimesheet.count({ where: { status: 'DRAFT' } }),
+      db.equipmentTimesheet.count({ where: { status: 'DRAFT' } }),
+      db.leaveRequest.count({ where: { status: 'PENDING' } }),
+      db.contract.count({
+        where: {
+          mobilizationDate: { lte: today },
+          OR: [{ closingDate: null }, { closingDate: { gte: today } }],
+        },
+      }),
+    ])
+
+  return {
+    pendingTimesheets: pendingOperatorTimesheets + pendingEquipmentTimesheets,
+    pendingLeave,
+    activeContracts,
+  }
+}
 
 export default async function RootLayout({
   children,
@@ -31,78 +45,21 @@ export default async function RootLayout({
   children: React.ReactNode
 }) {
   const user = await getCurrentUser()
+  const counts = user ? await loadSidebarCounts() : null
 
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="flex min-h-full flex-col">
-        <header className="border-b border-slate-200 bg-white">
-          <div className="mx-auto flex w-full max-w-6xl items-center gap-8 px-6 py-4">
-            <Link href="/" className="text-lg font-semibold tracking-tight">
-              Mecon
-            </Link>
-
-            {user && (
-              <>
-                <nav className="flex flex-1 flex-wrap gap-6 text-sm">
-                  {NAV.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className="text-slate-600 hover:text-slate-900"
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
-                  {canViewPayroll(user.role) && (
-                    <Link
-                      href="/payroll"
-                      className="text-slate-600 hover:text-slate-900"
-                    >
-                      Payroll
-                    </Link>
-                  )}
-                  {canManageUsers(user.role) && (
-                    <Link
-                      href="/admin/users"
-                      className="text-slate-600 hover:text-slate-900"
-                    >
-                      Users
-                    </Link>
-                  )}
-                  {canViewAudit(user.role) && (
-                    <Link
-                      href="/admin/audit"
-                      className="text-slate-600 hover:text-slate-900"
-                    >
-                      Audit log
-                    </Link>
-                  )}
-                </nav>
-
-                <div className="flex items-center gap-3 text-sm text-slate-500">
-                  <span>
-                    {user.name}{' '}
-                    <span className="text-xs text-slate-400">
-                      ({USER_ROLE_LABELS[user.role]})
-                    </span>
-                  </span>
-                  <form action={logout}>
-                    <button
-                      type="submit"
-                      className="text-slate-500 hover:text-slate-900 hover:underline"
-                    >
-                      Sign out
-                    </button>
-                  </form>
-                </div>
-              </>
-            )}
+      <body className="min-h-full bg-white text-slate-900">
+        {user && counts ? (
+          <div className="md:flex">
+            <Sidebar user={user} counts={counts} />
+            <main className="min-w-0 flex-1">
+              <div className="mx-auto max-w-[1120px] px-6 py-2 md:px-10">{children}</div>
+            </main>
           </div>
-        </header>
-
-        <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
-          {children}
-        </main>
+        ) : (
+          <main className="mx-auto max-w-[1120px] px-6 py-10 md:px-10">{children}</main>
+        )}
       </body>
     </html>
   )
