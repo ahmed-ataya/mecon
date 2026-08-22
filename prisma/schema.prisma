@@ -29,6 +29,84 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
+// Access control
+// ---------------------------------------------------------------------------
+//
+// Replaces the earlier shared-password review gate (src/proxy.ts's old Basic
+// Auth check) — that had no accounts, no roles and no audit trail, which is
+// exactly what this section adds. See src/lib/permissions.ts for what each
+// role can actually do, and src/lib/auth/ for the session mechanics.
+
+/// Email + password. Passwords are never stored in the clear — see
+/// src/lib/auth/password.ts (Node's built-in scrypt, no external dependency).
+model User {
+  id           String @id @default(cuid())
+  name         String
+  email        String @unique
+  passwordHash String
+
+  /// ADMIN | OPERATIONS | VIEWER — see src/lib/enums.ts and
+  /// src/lib/permissions.ts, the single place a role becomes an actual
+  /// yes/no for a given action.
+  role String
+
+  sessions  Session[]
+  auditLogs AuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+}
+
+/// An opaque random token, not a JWT — trivially revocable (delete the row)
+/// and needs no signing-secret management, which matters more for a handful
+/// of internal users than a stateless token would save. The cookie holds
+/// only this token; every request re-checks it against the database, so a
+/// deleted session or a deleted user stops working immediately.
+model Session {
+  id     String @id @default(cuid())
+  token  String @unique
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// One row per create/update/delete anywhere in the app — "who did it and
+/// when," viewable by Admin only. userName is a SNAPSHOT, not a live read
+/// through the relation (same reasoning Payslip's salary fields already
+/// follow) — a deleted user's history must still read who they were.
+/// entityLabel is likewise a snapshot for the same reason: a renamed or
+/// deleted record's audit history should still say what it used to be
+/// called, not "—" or a stale join.
+model AuditLog {
+  id     String @id @default(cuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  userName String
+
+  /// CREATE | UPDATE | DELETE
+  action String
+
+  /// The Prisma model name, e.g. "Contract", "Employee", "Document" — not
+  /// an enum, so a new resource never needs a migration to be logged.
+  entityType  String
+  entityId    String
+  entityLabel String?
+
+  createdAt DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
 // Parties and assets
 // ---------------------------------------------------------------------------
 
@@ -169,10 +247,36 @@ model Employee {
   bankName          String?
   bankAccountNumber String? /// IBAN or wage card number
 
+  // --- Leave — Phase E2 -------------------------------------------------
+  //
+  // A real gap found while scoping E2: nothing recorded when someone
+  // actually joined, so "eligible after 1 year", the 3-week/4-week service
+  // tier, and later E4's gratuity years-of-service had no date to compute
+  // from. Both added here — neither has real data yet (the imported 50-
+  // person roster only had staff number/name/designation), so both start
+  // empty and fill in as the business supplies them, same as
+  // `employeeNumber` did.
+
+  dateOfJoining DateTime?
+
+  /// Requested alongside E2 for the future E4 encashment calc (unused
+  /// annual leave paid out on exit) — not built this phase, needs this
+  /// field to exist first. Also drives the derived Exited status —
+  /// see src/lib/employee-status.ts. Status itself is NOT stored, per this
+  /// app's "status is always derived" convention (see NOTES.md).
+  dateOfExit DateTime?
+
+  /// Per-employee override of the statutory annual leave entitlement (days
+  /// per full service year) — null means "use the statutory default by
+  /// service length" (src/lib/leave.ts). Company may pay above, never
+  /// below the statutory floor.
+  annualLeaveEntitlementOverrideDays Int?
+
   documents      Document[]
   assignments    OperatorAssignment[]
   qualifications OperatorQualification[]
   payslips       Payslip[]
+  leaveRequests  LeaveRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -723,6 +827,20 @@ model OperatorTimesheetDay {
   breakdownHours Float @default(0)
   remarks        String?
 
+  /// WORKING | LEAVE | PUBLIC_HOLIDAY — Phase E2. Defaulted from an
+  /// APPROVED leave request overlapping this date when the timesheet is
+  /// generated (src/lib/actions/timesheets.ts), editable afterward the same
+  /// way workingHours is — leave approved after a timesheet already exists
+  /// just means correcting the day by hand. Exists so a leave day reads as
+  /// leave, not as an unworked gap — see ROADMAP.md Phase D's deferred item.
+  dayType String @default("WORKING")
+
+  /// Which leave type explains this day, set only when dayType = LEAVE. A
+  /// snapshot copied from the LeaveRequest at generation/edit time, not a
+  /// live foreign key — same "financial record, not a live read" reasoning
+  /// Payslip's salary fields already follow (NOTES.md).
+  leaveType String?
+
   @@unique([timesheetId, date])
   @@index([timesheetId])
 }
@@ -918,6 +1036,16 @@ model Payslip {
   regularHours  Float
   overtimeHours Float
 
+  /// Hours-equivalent of this period's APPROVED leave, split by whether it's
+  /// paid — Phase E2. Both feed shortfallDeduction below instead of every
+  /// short hour being treated as unpaid absence (src/lib/payroll.ts):
+  /// paidLeaveHours is excluded from the deduction, unpaidLeaveHours is
+  /// deducted the same as a genuine gap. Shown separately on the payslip so
+  /// the breakdown stays legible rather than silently blended into
+  /// regularHours.
+  paidLeaveHours   Float @default(0)
+  unpaidLeaveHours Float @default(0)
+
   /// Flat amount + note, not a loan/advance ledger with balances — nobody's
   /// asked for that yet.
   deductionsAmount Int    @default(0)
@@ -936,4 +1064,74 @@ model Payslip {
 
   @@unique([payrollPeriodId, employeeId])
   @@index([employeeId])
+}
+
+// ---------------------------------------------------------------------------
+// Leave — Phase E2
+// ---------------------------------------------------------------------------
+
+/// A specific declared public holiday (Eid Al Fitr, Eid Al Adha, Qatar
+/// National Day, ...) — entered by staff as a date range, same reasoning
+/// RamadanPeriod uses: Islamic holidays are moon-sighting dependent and
+/// cannot be hardcoded or guessed at in code. A public holiday landing
+/// inside an approved annual leave request does not consume a leave day —
+/// see src/lib/leave.ts.
+model PublicHoliday {
+  id        String   @id @default(cuid())
+  name      String
+  startDate DateTime
+  endDate   DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([startDate])
+}
+
+/// One leave request per continuous stretch. Balance, accrual and carry-over
+/// are all COMPUTED from the full history of a employee's APPROVED requests
+/// (src/lib/leave.ts) rather than stored as a running ledger — same "status
+/// is always derived" convention as document status, contract status and the
+/// timesheet overtime split (NOTES.md), so a balance can never drift out of
+/// step with a request that gets edited, cancelled or approved late.
+///
+/// "Approval" is a status field only, not a real approval trail — there is
+/// no user-account system yet to authenticate who decided what (confirmed
+/// scope, ROADMAP.md). decidedBy is free text for whoever is using the
+/// system to type their own name against the decision.
+model LeaveRequest {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  /// ANNUAL | SICK | UNPAID | HAJJ | MATERNITY | EMERGENCY | PUBLIC_HOLIDAY
+  /// — see src/lib/enums.ts.
+  leaveType String
+
+  startDate DateTime
+  endDate   DateTime
+
+  /// PENDING | APPROVED | REJECTED | CANCELLED
+  status String @default("PENDING")
+
+  requestedDate DateTime  @default(now())
+  decidedBy     String?
+  decidedDate   DateTime?
+
+  /// Overrides this leave type's default paid/unpaid treatment for this one
+  /// request only — e.g. the company granting a specific Emergency leave as
+  /// paid, which is unpaid by default (src/lib/leave.ts), pending the
+  /// business's own policy answer (see ROADMAP.md open questions). Null
+  /// follows the type default; Sick leave's tiering ignores this and always
+  /// computes its own full/half/unpaid split.
+  paidOverride Boolean?
+
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([leaveType])
+  @@index([status])
+  @@index([startDate])
 }

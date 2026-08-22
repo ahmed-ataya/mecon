@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { db } from '../db'
 import { equipmentSchema, fieldErrors } from '../validation'
+import { requireDelete, requireWrite } from '../auth/guard'
+import { logAudit } from '../audit'
 
 /** `values` echoes the submitted form back on failure — see actions/customers.ts */
 export type ActionState = {
@@ -32,6 +34,8 @@ export async function createEquipment(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const user = await requireWrite()
+
   const values = readEquipmentForm(formData)
   const parsed = equipmentSchema.safeParse(values)
 
@@ -40,6 +44,14 @@ export async function createEquipment(
   }
 
   const equipment = await db.equipment.create({ data: parsed.data })
+
+  await logAudit({
+    user,
+    action: 'CREATE',
+    entityType: 'Equipment',
+    entityId: equipment.id,
+    entityLabel: equipment.name,
+  })
 
   revalidatePath('/equipment')
   redirect(`/equipment/${equipment.id}`)
@@ -50,6 +62,8 @@ export async function updateEquipment(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const user = await requireWrite()
+
   const values = readEquipmentForm(formData)
   const parsed = equipmentSchema.safeParse(values)
 
@@ -57,7 +71,15 @@ export async function updateEquipment(
     return { errors: fieldErrors(parsed.error), values }
   }
 
-  await db.equipment.update({ where: { id }, data: parsed.data })
+  const equipment = await db.equipment.update({ where: { id }, data: parsed.data })
+
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'Equipment',
+    entityId: equipment.id,
+    entityLabel: equipment.name,
+  })
 
   revalidatePath('/equipment')
   revalidatePath(`/equipment/${id}`)
@@ -65,6 +87,8 @@ export async function updateEquipment(
 }
 
 export async function deleteEquipment(id: string) {
+  const user = await requireDelete()
+
   // Documents cascade. Assignments do not — a machine with assignment history
   // is part of a contract's billing record and must not disappear.
   const assignmentCount = await db.equipmentAssignment.count({
@@ -77,7 +101,15 @@ export async function deleteEquipment(id: string) {
     }
   }
 
-  await db.equipment.delete({ where: { id } })
+  const equipment = await db.equipment.delete({ where: { id } })
+
+  await logAudit({
+    user,
+    action: 'DELETE',
+    entityType: 'Equipment',
+    entityId: equipment.id,
+    entityLabel: equipment.name,
+  })
 
   revalidatePath('/equipment')
   redirect('/equipment')

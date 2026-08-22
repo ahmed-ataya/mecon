@@ -9,6 +9,8 @@ import {
   formatSystemInvoiceNumber,
   nextSystemSequence,
 } from '../invoice-number'
+import { requireDelete, requireWrite } from '../auth/guard'
+import { logAudit } from '../audit'
 
 export type ActionState = {
   errors?: Record<string, string>
@@ -82,6 +84,7 @@ export async function createInvoices(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const user = await requireWrite()
   const values = readForm(formData)
 
   const customerId = values.customerId ?? ''
@@ -246,6 +249,14 @@ export async function createInvoices(
     })
 
     created.push(invoice.id)
+
+    await logAudit({
+      user,
+      action: 'CREATE',
+      entityType: 'Invoice',
+      entityId: invoice.id,
+      entityLabel: invoice.invoiceNumber,
+    })
   }
 
   if (created.length === 0) {
@@ -269,6 +280,7 @@ export async function updateDraft(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const user = await requireWrite()
   const values = readForm(formData)
 
   const invoice = await db.invoice.findUnique({ where: { id } })
@@ -301,6 +313,14 @@ export async function updateDraft(
     },
   })
 
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'Invoice',
+    entityId: id,
+    entityLabel: invoiceNumber,
+  })
+
   revalidatePath(`/invoices/${id}`)
   return {}
 }
@@ -314,6 +334,8 @@ export async function updateDraft(
  * a date, not a live view.
  */
 export async function issueInvoice(id: string) {
+  const user = await requireWrite()
+
   const invoice = await db.invoice.findUnique({ where: { id } })
   if (!invoice || invoice.status !== 'DRAFT') return
 
@@ -322,14 +344,32 @@ export async function issueInvoice(id: string) {
     data: { status: 'ISSUED', issuedDate: invoice.issuedDate ?? todayUtc() },
   })
 
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'Invoice',
+    entityId: id,
+    entityLabel: `Issued — ${invoice.invoiceNumber}`,
+  })
+
   revalidatePath('/invoices')
   revalidatePath(`/invoices/${id}`)
 }
 
 export async function markPaid(id: string) {
-  await db.invoice.update({
+  const user = await requireWrite()
+
+  const invoice = await db.invoice.update({
     where: { id },
     data: { status: 'PAID', paidDate: todayUtc() },
+  })
+
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'Invoice',
+    entityId: id,
+    entityLabel: `Marked paid — ${invoice.invoiceNumber}`,
   })
 
   revalidatePath('/invoices')
@@ -338,9 +378,19 @@ export async function markPaid(id: string) {
 
 /** Back to unpaid — for when a payment was recorded against the wrong invoice. */
 export async function markUnpaid(id: string) {
-  await db.invoice.update({
+  const user = await requireWrite()
+
+  const invoice = await db.invoice.update({
     where: { id },
     data: { status: 'ISSUED', paidDate: null },
+  })
+
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'Invoice',
+    entityId: id,
+    entityLabel: `Marked unpaid — ${invoice.invoiceNumber}`,
   })
 
   revalidatePath('/invoices')
@@ -349,10 +399,20 @@ export async function markUnpaid(id: string) {
 
 /** Drafts only. An issued invoice has left the building and stays on record. */
 export async function deleteDraft(id: string) {
+  const user = await requireDelete()
+
   const invoice = await db.invoice.findUnique({ where: { id } })
   if (!invoice || invoice.status !== 'DRAFT') return
 
   await db.invoice.delete({ where: { id } })
+
+  await logAudit({
+    user,
+    action: 'DELETE',
+    entityType: 'Invoice',
+    entityId: invoice.id,
+    entityLabel: invoice.invoiceNumber,
+  })
 
   revalidatePath('/invoices')
   redirect('/invoices')

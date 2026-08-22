@@ -2,8 +2,10 @@ import Link from 'next/link'
 import { todayUtc } from '@/lib/dates'
 import { createPayrollPeriod } from '@/lib/actions/payroll'
 import { NewPayrollPeriodForm } from '@/components/payroll/NewPayrollPeriodForm'
+import { requirePayrollPage } from '@/lib/auth/guard'
 
 export default async function NewPayrollPeriodPage() {
+  await requirePayrollPage()
   // Payroll is normally run for the month just ending — same "last calendar
   // month" default the invoice generator already uses.
   const today = todayUtc()

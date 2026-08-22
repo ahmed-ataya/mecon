@@ -10,12 +10,14 @@ import {
 } from '@/lib/actions/payroll'
 import { FinalizeButton } from '@/components/payroll/FinalizeButton'
 import { buttonSecondaryClass } from '@/components/ui/form'
+import { requirePayrollPage } from '@/lib/auth/guard'
 
 export default async function PayrollPeriodDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
+  await requirePayrollPage()
   const { id } = await params
   const period = await loadPayrollPeriod(id)
 
@@ -62,6 +64,9 @@ export default async function PayrollPeriodDetailPage({
           <div className="flex gap-3">
             <Link href={`/payroll/${period.id}/export`} className={buttonSecondaryClass}>
               Export register (CSV)
+            </Link>
+            <Link href={`/payroll/${period.id}/wps`} className={buttonSecondaryClass}>
+              WPS export
             </Link>
             <FinalizeButton
               finalized={isFinalized}

@@ -62,13 +62,31 @@ export function checkMinimumWage({
 }
 
 /**
- * Every calendar day's standard hours for one month — 8, or 6 inside a
- * Ramadan period (no pay reduction; that's why standard hours drop rather
- * than a deduction being calculated), 0 on Friday. This is what a
- * timesheet-sourced payslip's regularHours is measured AGAINST to find a
- * shortfall — not what an ESTIMATE-sourced payslip pays outright, though
- * for that source regularHours starts out equal to this figure (fully
- * editable from there).
+ * One calendar day's standard hours — 8, or 6 inside a Ramadan period (no
+ * pay reduction; that's why standard hours drop rather than a deduction
+ * being calculated), 0 on Friday. Also what a leave or public-holiday day
+ * is valued at for payroll purposes — see resolveLeaveDaysInRange in
+ * src/lib/leave.ts, which calls this per day.
+ */
+export function standardHoursForDate(
+  date: Date,
+  ramadanPeriods: { startDate: Date; endDate: Date }[],
+): number {
+  if (!isWorkingDay(date)) return 0
+
+  const inRamadan = ramadanPeriods.some(
+    (period) => date >= period.startDate && date <= period.endDate,
+  )
+  return inRamadan ? RAMADAN_HOURS_PER_DAY : STANDARD_HOURS_PER_DAY
+}
+
+/**
+ * Every calendar day's standard hours for one month, summed. This is what a
+ * timesheet-sourced payslip's regularHours (plus any leave hours — see
+ * below) is measured AGAINST to find a shortfall — not what an ESTIMATE-
+ * sourced payslip pays outright, though for that source regularHours starts
+ * out equal to this figure minus any known leave (fully editable from
+ * there).
  */
 export function standardHoursForMonth({
   year,
@@ -88,12 +106,7 @@ export function standardHoursForMonth({
     cursor <= monthEnd;
     cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000)
   ) {
-    if (!isWorkingDay(cursor)) continue
-
-    const inRamadan = ramadanPeriods.some(
-      (period) => cursor >= period.startDate && cursor <= period.endDate,
-    )
-    hours += inRamadan ? RAMADAN_HOURS_PER_DAY : STANDARD_HOURS_PER_DAY
+    hours += standardHoursForDate(cursor, ramadanPeriods)
   }
 
   return hours
@@ -109,12 +122,19 @@ export type PayslipCalculationInput = {
   standardHours: number
   regularHours: number
   overtimeHours: number
+  /** Hours-equivalent of this period's APPROVED leave — Phase E2. See
+   * computePayslip's comment for how these feed the shortfall below. */
+  paidLeaveHours: number
+  unpaidLeaveHours: number
   deductionsAmount: number
 }
 
 export type PayslipCalculation = {
   dailyRate: number
   hourlyRate: number
+  /** Total hours deducted at the hourly rate — a genuine unexplained gap
+   * PLUS any unpaid leave, never blended into one unlabelled number: see
+   * paidLeaveHours/unpaidLeaveHours on the payslip itself for the split. */
   shortfallHours: number
   shortfallDeduction: number
   overtimePay: number
@@ -153,16 +173,23 @@ export type PayslipCalculation = {
  * higher tiers can't be detected automatically. Only 125% is applied; a
  * night or rest-day premium needs a manual adjustment for now.
  *
- * Any hours short of standardHours are treated as an unpaid gap — there is
- * no leave management yet (Phase E2) to tell paid sick leave apart from
- * unpaid absence, so every shortfall is deducted without asking why.
- * Revisit once E2 exists.
+ * Hours short of standardHours split into two, Phase E2 onward:
+ *   - EXPLAINED by regularHours worked plus any leave (paid or unpaid) —
+ *     paidLeaveHours never counts against pay; unpaidLeaveHours does.
+ *   - UNEXPLAINED — nothing worked and no approved leave on record — still
+ *     deducted in full, same as before E2 existed, because there is
+ *     nothing to tell it apart from absence.
+ * shortfallHours (returned below) is the sum of both — what actually gets
+ * deducted — while paidLeaveHours/unpaidLeaveHours stay visible separately
+ * on the payslip so the reason is never silently blended away.
  */
 export function computePayslip(input: PayslipCalculationInput): PayslipCalculation {
   const dailyRate = input.basicSalary / 30
   const hourlyRate = dailyRate / STANDARD_HOURS_PER_DAY
 
-  const shortfallHours = Math.max(0, input.standardHours - input.regularHours)
+  const explainedHours = input.regularHours + input.paidLeaveHours + input.unpaidLeaveHours
+  const unexplainedShortfallHours = Math.max(0, input.standardHours - explainedHours)
+  const shortfallHours = unexplainedShortfallHours + input.unpaidLeaveHours
   const shortfallDeduction = Math.round(shortfallHours * hourlyRate)
   const overtimePay = Math.round(
     input.overtimeHours * hourlyRate * OVERTIME_RATE_MULTIPLIER,

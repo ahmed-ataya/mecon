@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { db } from '../db'
 import { fieldErrors, ramadanPeriodSchema } from '../validation'
+import { requirePayrollAccess } from '../auth/guard'
+import { logAudit } from '../audit'
 
 export type RamadanActionState = {
   errors?: Record<string, string>
@@ -13,6 +15,8 @@ export async function createRamadanPeriod(
   _prev: RamadanActionState,
   formData: FormData,
 ): Promise<RamadanActionState> {
+  const user = await requirePayrollAccess()
+
   const values = {
     year: String(formData.get('year') ?? ''),
     startDate: String(formData.get('startDate') ?? ''),
@@ -35,13 +39,32 @@ export async function createRamadanPeriod(
     }
   }
 
-  await db.ramadanPeriod.create({ data: parsed.data })
+  const period = await db.ramadanPeriod.create({ data: parsed.data })
+
+  await logAudit({
+    user,
+    action: 'CREATE',
+    entityType: 'RamadanPeriod',
+    entityId: period.id,
+    entityLabel: String(period.year),
+  })
 
   revalidatePath('/payroll/ramadan')
   return {}
 }
 
 export async function deleteRamadanPeriod(id: string) {
-  await db.ramadanPeriod.delete({ where: { id } })
+  const user = await requirePayrollAccess()
+
+  const period = await db.ramadanPeriod.delete({ where: { id } })
+
+  await logAudit({
+    user,
+    action: 'DELETE',
+    entityType: 'RamadanPeriod',
+    entityId: period.id,
+    entityLabel: String(period.year),
+  })
+
   revalidatePath('/payroll/ramadan')
 }

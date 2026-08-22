@@ -5,9 +5,13 @@ import { redirect } from 'next/navigation'
 import { db } from '../db'
 import { todayUtc } from '../dates'
 import { splitOvertimeHours } from '../overtime'
-import { computePayslip, standardHoursForMonth } from '../payroll'
+import { computePayslip, standardHoursForDate, standardHoursForMonth } from '../payroll'
+import { countApprovedSickDaysBefore, resolveLeaveDaysInRange } from '../leave'
+import type { LeaveType } from '../enums'
 import { formatTimesheetNumber, nextTimesheetSequence } from '../timesheet-number'
 import { fieldErrors, payrollPeriodCreateSchema } from '../validation'
+import { requirePayrollAccess } from '../auth/guard'
+import { logAudit } from '../audit'
 
 /** Reuses the generic sequential-numbering helper Phase D built — the name
  * is a historical accident (it was written for timesheets first), the logic
@@ -30,13 +34,24 @@ export type UpdatePayslipActionState = {
  * WHOLE workforce rather than just contract-linked operators (see
  * ROADMAP.md's Phase E3 scope note): every employee gets a payslip, only
  * the hours' source differs.
+ *
+ * paidLeaveHours/unpaidLeaveHours (Phase E2) are computed identically for
+ * both sources from the employee's own APPROVED leave requests — never from
+ * the timesheet's day types, which only exist for display (see
+ * OperatorTimesheetDay's model comment). For an ESTIMATE employee they
+ * reduce the assumed-full-attendance regularHours; for a TIMESHEET employee
+ * a genuine leave day already shows 0 worked hours, so regularHours needs
+ * no adjustment — the leave hours are simply added alongside it.
  */
 function resolveHours(
   standardHours: number,
   signedDays: { workingHours: number }[],
+  paidLeaveHours: number,
+  unpaidLeaveHours: number,
 ): { hoursSource: string; regularHours: number; overtimeHours: number } {
   if (signedDays.length === 0) {
-    return { hoursSource: 'ESTIMATE', regularHours: standardHours, overtimeHours: 0 }
+    const regularHours = Math.max(0, standardHours - paidLeaveHours - unpaidLeaveHours)
+    return { hoursSource: 'ESTIMATE', regularHours, overtimeHours: 0 }
   }
 
   let regularHours = 0
@@ -48,6 +63,75 @@ function resolveHours(
   }
 
   return { hoursSource: 'TIMESHEET', regularHours, overtimeHours }
+}
+
+/**
+ * This employee's approved leave for one payroll month, converted to
+ * paid/unpaid hours — Phase E2. Shared by generation and re-pull so both
+ * paths compute it identically. See src/lib/leave.ts's resolveLeaveDaysInRange
+ * for why a public holiday and sick leave's pay tiers are handled the way
+ * they are.
+ */
+async function leaveHoursForEmployeePeriod(
+  employee: { id: string; dateOfJoining: Date | null },
+  year: number,
+  month: number,
+  ramadanPeriods: { startDate: Date; endDate: Date }[],
+): Promise<{ paidLeaveHours: number; unpaidLeaveHours: number }> {
+  const monthStart = new Date(Date.UTC(year, month - 1, 1))
+  const monthEnd = new Date(Date.UTC(year, month, 0))
+
+  const [approvedRequests, publicHolidays, priorSickRequests] = await Promise.all([
+    db.leaveRequest.findMany({
+      where: {
+        employeeId: employee.id,
+        status: 'APPROVED',
+        startDate: { lte: monthEnd },
+        endDate: { gte: monthStart },
+      },
+    }),
+    db.publicHoliday.findMany({
+      where: { startDate: { lte: monthEnd }, endDate: { gte: monthStart } },
+    }),
+    db.leaveRequest.findMany({
+      where: {
+        employeeId: employee.id,
+        status: 'APPROVED',
+        leaveType: 'SICK',
+        startDate: { lt: monthStart },
+      },
+      select: { startDate: true, endDate: true },
+    }),
+  ])
+
+  const priorSickDaysThisServiceYear = countApprovedSickDaysBefore({
+    dateOfJoining: employee.dateOfJoining,
+    approvedSickRequests: priorSickRequests,
+    before: monthStart,
+  })
+
+  const resolvedDays = resolveLeaveDaysInRange({
+    rangeStart: monthStart,
+    rangeEnd: monthEnd,
+    approvedRequests: approvedRequests.map((r) => ({
+      leaveType: r.leaveType as LeaveType,
+      startDate: r.startDate,
+      endDate: r.endDate,
+      paidOverride: r.paidOverride,
+    })),
+    publicHolidays,
+    priorSickDaysThisServiceYear,
+  })
+
+  let paidLeaveHours = 0
+  let unpaidLeaveHours = 0
+  for (const day of resolvedDays) {
+    const hours = standardHoursForDate(day.date, ramadanPeriods)
+    paidLeaveHours += hours * day.payFraction
+    unpaidLeaveHours += hours * (1 - day.payFraction)
+  }
+
+  return { paidLeaveHours, unpaidLeaveHours }
 }
 
 /**
@@ -108,9 +192,18 @@ async function generatePayslips(
   let created = 0
 
   for (const employee of employees) {
+    const { paidLeaveHours, unpaidLeaveHours } = await leaveHoursForEmployeePeriod(
+      employee,
+      year,
+      month,
+      ramadanPeriods,
+    )
+
     const { hoursSource, regularHours, overtimeHours } = resolveHours(
       standardHours,
       signedDaysByEmployee.get(employee.id) ?? [],
+      paidLeaveHours,
+      unpaidLeaveHours,
     )
 
     const calc = computePayslip({
@@ -123,6 +216,8 @@ async function generatePayslips(
       standardHours,
       regularHours,
       overtimeHours,
+      paidLeaveHours,
+      unpaidLeaveHours,
       deductionsAmount: 0,
     })
 
@@ -141,6 +236,8 @@ async function generatePayslips(
         standardHours,
         regularHours,
         overtimeHours,
+        paidLeaveHours,
+        unpaidLeaveHours,
         shortfallDeduction: calc.shortfallDeduction,
         overtimePay: calc.overtimePay,
         grossPay: calc.grossPay,
@@ -159,6 +256,8 @@ export async function createPayrollPeriod(
   _prev: CreatePeriodActionState,
   formData: FormData,
 ): Promise<CreatePeriodActionState> {
+  const user = await requirePayrollAccess()
+
   const values = {
     year: String(formData.get('year') ?? ''),
     month: String(formData.get('month') ?? ''),
@@ -186,6 +285,14 @@ export async function createPayrollPeriod(
 
   await generatePayslips(period.id, year, month)
 
+  await logAudit({
+    user,
+    action: 'CREATE',
+    entityType: 'PayrollPeriod',
+    entityId: period.id,
+    entityLabel: `${month}/${year}`,
+  })
+
   revalidatePath('/payroll')
   redirect(`/payroll/${period.id}`)
 }
@@ -193,6 +300,8 @@ export async function createPayrollPeriod(
 /** Re-pulls one employee's hours — useful when a timesheet gets signed
  * after the payroll period was first generated. */
 export async function regeneratePayslip(payslipId: string) {
+  const user = await requirePayrollAccess()
+
   const payslip = await db.payslip.findUnique({
     where: { id: payslipId },
     include: { payrollPeriod: true },
@@ -202,7 +311,7 @@ export async function regeneratePayslip(payslipId: string) {
 
   const { year, month } = payslip.payrollPeriod
 
-  const [ramadanPeriods, assignments] = await Promise.all([
+  const [ramadanPeriods, assignments, employee] = await Promise.all([
     db.ramadanPeriod.findMany(),
     db.operatorAssignment.findMany({
       where: { operatorId: payslip.employeeId },
@@ -213,19 +322,33 @@ export async function regeneratePayslip(payslipId: string) {
         },
       },
     }),
+    db.employee.findUniqueOrThrow({
+      where: { id: payslip.employeeId },
+      select: { id: true, dateOfJoining: true },
+    }),
   ])
 
-  const standardHours = standardHoursForMonth({
+  const ramadanRanges = ramadanPeriods.map((period) => ({
+    startDate: period.startDate,
+    endDate: period.endDate,
+  }))
+
+  const standardHours = standardHoursForMonth({ year, month, ramadanPeriods: ramadanRanges })
+
+  const { paidLeaveHours, unpaidLeaveHours } = await leaveHoursForEmployeePeriod(
+    employee,
     year,
     month,
-    ramadanPeriods: ramadanPeriods.map((period) => ({
-      startDate: period.startDate,
-      endDate: period.endDate,
-    })),
-  })
+    ramadanRanges,
+  )
 
   const signedDays = assignments.flatMap((a) => a.timesheets.flatMap((ts) => ts.days))
-  const { hoursSource, regularHours, overtimeHours } = resolveHours(standardHours, signedDays)
+  const { hoursSource, regularHours, overtimeHours } = resolveHours(
+    standardHours,
+    signedDays,
+    paidLeaveHours,
+    unpaidLeaveHours,
+  )
 
   const calc = computePayslip({
     basicSalary: payslip.basicSalary,
@@ -237,6 +360,8 @@ export async function regeneratePayslip(payslipId: string) {
     standardHours,
     regularHours,
     overtimeHours,
+    paidLeaveHours,
+    unpaidLeaveHours,
     deductionsAmount: payslip.deductionsAmount,
   })
 
@@ -247,11 +372,21 @@ export async function regeneratePayslip(payslipId: string) {
       standardHours,
       regularHours,
       overtimeHours,
+      paidLeaveHours,
+      unpaidLeaveHours,
       shortfallDeduction: calc.shortfallDeduction,
       overtimePay: calc.overtimePay,
       grossPay: calc.grossPay,
       netPay: calc.netPay,
     },
+  })
+
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'Payslip',
+    entityId: payslipId,
+    entityLabel: 'Re-pulled hours',
   })
 
   revalidatePath(`/payroll/${payslip.payrollPeriodId}`)
@@ -263,6 +398,8 @@ export async function updatePayslip(
   _prev: UpdatePayslipActionState,
   formData: FormData,
 ): Promise<UpdatePayslipActionState> {
+  const user = await requirePayrollAccess()
+
   const payslip = await db.payslip.findUnique({
     where: { id: payslipId },
     include: { payrollPeriod: true },
@@ -275,6 +412,8 @@ export async function updatePayslip(
 
   const regularHours = Number(formData.get('regularHours'))
   const overtimeHours = Number(formData.get('overtimeHours'))
+  const paidLeaveHours = Number(formData.get('paidLeaveHours') || '0')
+  const unpaidLeaveHours = Number(formData.get('unpaidLeaveHours') || '0')
   const deductionsAmountRiyals = Number(formData.get('deductionsAmount') || '0')
   const deductionsNote = String(formData.get('deductionsNote') ?? '').trim() || null
 
@@ -283,6 +422,12 @@ export async function updatePayslip(
   }
   if (!Number.isFinite(overtimeHours) || overtimeHours < 0) {
     return { errors: { form: 'Overtime hours must be a positive number.' } }
+  }
+  if (!Number.isFinite(paidLeaveHours) || paidLeaveHours < 0) {
+    return { errors: { form: 'Paid leave hours must be a positive number.' } }
+  }
+  if (!Number.isFinite(unpaidLeaveHours) || unpaidLeaveHours < 0) {
+    return { errors: { form: 'Unpaid leave hours must be a positive number.' } }
   }
   if (!Number.isFinite(deductionsAmountRiyals) || deductionsAmountRiyals < 0) {
     return { errors: { form: 'Deductions must be a positive number.' } }
@@ -300,6 +445,8 @@ export async function updatePayslip(
     standardHours: payslip.standardHours,
     regularHours,
     overtimeHours,
+    paidLeaveHours,
+    unpaidLeaveHours,
     deductionsAmount,
   })
 
@@ -308,6 +455,8 @@ export async function updatePayslip(
     data: {
       regularHours,
       overtimeHours,
+      paidLeaveHours,
+      unpaidLeaveHours,
       deductionsAmount,
       deductionsNote,
       shortfallDeduction: calc.shortfallDeduction,
@@ -317,15 +466,33 @@ export async function updatePayslip(
     },
   })
 
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'Payslip',
+    entityId: payslipId,
+    entityLabel: null,
+  })
+
   revalidatePath(`/payroll/${payslip.payrollPeriodId}`)
   revalidatePath(`/payroll/payslip/${payslipId}`)
   return { ok: true }
 }
 
 export async function finalizePayrollPeriod(id: string) {
-  await db.payrollPeriod.update({
+  const user = await requirePayrollAccess()
+
+  const period = await db.payrollPeriod.update({
     where: { id },
     data: { status: 'FINALIZED', finalizedDate: todayUtc() },
+  })
+
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'PayrollPeriod',
+    entityId: period.id,
+    entityLabel: `Finalized — ${period.month}/${period.year}`,
   })
 
   revalidatePath(`/payroll/${id}`)
@@ -333,9 +500,19 @@ export async function finalizePayrollPeriod(id: string) {
 }
 
 export async function unfinalizePayrollPeriod(id: string) {
-  await db.payrollPeriod.update({
+  const user = await requirePayrollAccess()
+
+  const period = await db.payrollPeriod.update({
     where: { id },
     data: { status: 'DRAFT', finalizedDate: null },
+  })
+
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'PayrollPeriod',
+    entityId: period.id,
+    entityLabel: `Unfinalized — ${period.month}/${period.year}`,
   })
 
   revalidatePath(`/payroll/${id}`)

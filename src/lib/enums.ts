@@ -271,6 +271,105 @@ export const DOCUMENT_FILE_ACCEPT = DOCUMENT_FILE_ALLOWED_TYPES.join(',')
 
 export const DOCUMENT_FILE_MAX_BYTES = 20 * 1024 * 1024
 
+// --- WPS / banks --------------------------------------------------------
+
+/**
+ * Which bank each employee is paid through — Phase F. Most staff are with
+ * Commercial Bank of Qatar; the GM and his partner are with QNB and use a
+ * separate WPS form. A closed list, not free text like most of this app's
+ * "the real world isn't a closed set" fields — this one determines which
+ * SIF file an employee's payslip lands in, so an unlisted bank must not be
+ * silently possible. Add a bank here only once its own SIF field layout is
+ * confirmed from a real form (see src/lib/wps.ts).
+ */
+export const BANKS = ['CBQ', 'QNB'] as const
+export type Bank = (typeof BANKS)[number]
+
+export const BANK_LABELS: Record<Bank, string> = {
+  CBQ: 'Commercial Bank of Qatar (CBQ)',
+  QNB: 'Qatar National Bank (QNB)',
+}
+
+// --- Access control ---------------------------------------------------------
+
+/**
+ * ADMIN — full access, including payroll/salary/audit trail, manages
+ * accounts.
+ * OPERATIONS — create/edit everywhere except payroll/salary; no delete, no
+ * user management, no payroll visibility.
+ * VIEWER — read-only everywhere except payroll/salary, which stays hidden
+ * the same as it is from OPERATIONS.
+ *
+ * See src/lib/permissions.ts, which is the single place that turns a role
+ * into an actual yes/no for a given action — nothing else should
+ * reimplement that logic.
+ */
+export const USER_ROLES = ['ADMIN', 'OPERATIONS', 'VIEWER'] as const
+export type UserRole = (typeof USER_ROLES)[number]
+
+export const USER_ROLE_LABELS: Record<UserRole, string> = {
+  ADMIN: 'Admin',
+  OPERATIONS: 'Operations',
+  VIEWER: 'Viewer',
+}
+
+// --- Leave — Phase E2 -------------------------------------------------------
+
+/**
+ * Every leave type the business needs to record. PUBLIC_HOLIDAY is included
+ * here (not just tracked via PublicHoliday) so a day an employee was off for
+ * a declared holiday shows on their own leave history the same way any other
+ * leave type does, and so timesheet days can carry it as a dayType.
+ */
+export const LEAVE_TYPES = [
+  'ANNUAL',
+  'SICK',
+  'UNPAID',
+  'HAJJ',
+  'MATERNITY',
+  'EMERGENCY',
+  'PUBLIC_HOLIDAY',
+] as const
+export type LeaveType = (typeof LEAVE_TYPES)[number]
+
+export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
+  ANNUAL: 'Annual leave',
+  SICK: 'Sick leave',
+  UNPAID: 'Unpaid leave',
+  HAJJ: 'Hajj leave',
+  MATERNITY: 'Maternity leave',
+  EMERGENCY: 'Emergency leave',
+  PUBLIC_HOLIDAY: 'Public holiday',
+}
+
+/** A status field only — see LeaveRequest's model comment for why this is
+ * not a real approval trail. */
+/** LEAVE_TYPES minus PUBLIC_HOLIDAY — that one is system-derived from
+ * PublicHoliday records, not something office staff file a request for. */
+export const REQUESTABLE_LEAVE_TYPES = LEAVE_TYPES.filter(
+  (type) => type !== 'PUBLIC_HOLIDAY',
+)
+
+export const LEAVE_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'] as const
+export type LeaveStatus = (typeof LEAVE_STATUSES)[number]
+
+export const LEAVE_STATUS_LABELS: Record<LeaveStatus, string> = {
+  PENDING: 'Pending',
+  APPROVED: 'Approved',
+  REJECTED: 'Rejected',
+  CANCELLED: 'Cancelled',
+}
+
+/** OperatorTimesheetDay.dayType — see the model comment in schema.prisma. */
+export const TIMESHEET_DAY_TYPES = ['WORKING', 'LEAVE', 'PUBLIC_HOLIDAY'] as const
+export type TimesheetDayType = (typeof TIMESHEET_DAY_TYPES)[number]
+
+export const TIMESHEET_DAY_TYPE_LABELS: Record<TimesheetDayType, string> = {
+  WORKING: 'Working',
+  LEAVE: 'Leave',
+  PUBLIC_HOLIDAY: 'Public holiday',
+}
+
 // --- Sites and approval bodies -------------------------------------------
 
 export const APPROVAL_BODIES = [

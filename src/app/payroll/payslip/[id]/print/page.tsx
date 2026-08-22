@@ -5,12 +5,14 @@ import { computePayslip } from '@/lib/payroll'
 import { loadPayslip } from '@/lib/payroll-queries'
 import { COMPANY } from '@/lib/company'
 import { PrintControls } from '@/components/invoices/PrintControls'
+import { requirePayrollPage } from '@/lib/auth/guard'
 
 export default async function PayslipPrintPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
+  await requirePayrollPage()
   const { id } = await params
   const payslip = await loadPayslip(id)
 

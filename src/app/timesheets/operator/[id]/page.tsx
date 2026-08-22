@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { toDateInputValue } from '@/lib/dates'
 import { monthLabel } from '@/lib/timesheet'
+import type { LeaveType, TimesheetDayType } from '@/lib/enums'
 import { loadOperatorTimesheet } from '@/lib/timesheet-queries'
 import {
   signOperatorTimesheet,
@@ -95,6 +96,8 @@ export default async function OperatorTimesheetDetailPage({
           workingHours: day.workingHours,
           breakdownHours: day.breakdownHours,
           remarks: day.remarks,
+          dayType: day.dayType as TimesheetDayType,
+          leaveType: day.leaveType as LeaveType | null,
         }))}
         action={updateOperatorTimesheetDays.bind(null, timesheet.id)}
         showOvertimeSplit={true}

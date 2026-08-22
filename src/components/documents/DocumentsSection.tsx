@@ -51,12 +51,20 @@ export function DocumentsSection({
   ownerId,
   documents,
   equipmentTypeOptions = [],
+  canWrite = true,
+  canDelete = true,
 }: {
   ownerType: OwnerType
   ownerId: string
   documents: DocumentWithApprovals[]
   /** Only meaningful for OPERATOR — see DocumentForm.tsx. */
   equipmentTypeOptions?: { value: string; label: string }[]
+  /** Access control (Phase F) — Viewer can't add/edit, Operations can't
+   * delete. The server action re-checks regardless; this only controls
+   * whether the buttons render. Default true keeps every other caller (if
+   * any is ever added without passing these) behaving as it always has. */
+  canWrite?: boolean
+  canDelete?: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -87,7 +95,7 @@ export function DocumentsSection({
             {documents.length} on file
           </p>
         </div>
-        {openForm !== 'new' && (
+        {canWrite && openForm !== 'new' && (
           <button
             type="button"
             onClick={() => setOpenForm('new')}
@@ -205,23 +213,27 @@ export function DocumentsSection({
                   </div>
 
                   <div className="flex shrink-0 gap-3 text-sm">
-                    <button
-                      type="button"
-                      onClick={() => setOpenForm(document.id)}
-                      className="text-slate-600 hover:text-slate-900 hover:underline"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isPending}
-                      onClick={() =>
-                        handleDelete(document.id, document.documentType)
-                      }
-                      className="text-red-600 hover:underline disabled:opacity-50"
-                    >
-                      Delete
-                    </button>
+                    {canWrite && (
+                      <button
+                        type="button"
+                        onClick={() => setOpenForm(document.id)}
+                        className="text-slate-600 hover:text-slate-900 hover:underline"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button
+                        type="button"
+                        disabled={isPending}
+                        onClick={() =>
+                          handleDelete(document.id, document.documentType)
+                        }
+                        className="text-red-600 hover:underline disabled:opacity-50"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               )}

@@ -3,8 +3,10 @@ import { monthLabel } from '@/lib/timesheet'
 import { formatQar } from '@/lib/money'
 import { loadPayrollPeriods } from '@/lib/payroll-queries'
 import { buttonPrimaryClass } from '@/components/ui/form'
+import { requirePayrollPage } from '@/lib/auth/guard'
 
 export default async function PayrollPage() {
+  await requirePayrollPage()
   const periods = await loadPayrollPeriods()
 
   return (

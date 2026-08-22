@@ -2,7 +2,16 @@
 
 import { useActionState, useState } from 'react'
 import { splitOvertimeHours } from '@/lib/overtime'
+import {
+  REQUESTABLE_LEAVE_TYPES,
+  LEAVE_TYPE_LABELS,
+  TIMESHEET_DAY_TYPES,
+  TIMESHEET_DAY_TYPE_LABELS,
+  type LeaveType,
+  type TimesheetDayType,
+} from '@/lib/enums'
 import type { UpdateDaysActionState } from '@/lib/actions/timesheets'
+import { Select } from '@/components/ui/Select'
 import { FormError, buttonPrimaryClass } from '@/components/ui/form'
 
 export type DailyRow = {
@@ -13,6 +22,9 @@ export type DailyRow = {
   workingHours: number
   breakdownHours: number
   remarks: string | null
+  /** Only meaningful on the operator table — see showOvertimeSplit below. */
+  dayType?: TimesheetDayType
+  leaveType?: LeaveType | null
 }
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
@@ -100,6 +112,9 @@ export function DailyRowsTable({
           <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-2 py-2 font-medium">Date</th>
+              {showOvertimeSplit && (
+                <th className="px-2 py-2 font-medium">Day type</th>
+              )}
               <th className="px-2 py-2 font-medium">Start</th>
               <th className="px-2 py-2 font-medium">Finish</th>
               <th className="px-2 py-2 font-medium">Working hrs</th>
@@ -117,6 +132,8 @@ export function DailyRowsTable({
             {rows.map((row) => {
               const { dayName, dayNumber, isFriday } = dayLabel(row.date)
               const split = splitOvertimeHours(row.workingHours)
+              const dayType = row.dayType ?? 'WORKING'
+              const notWorking = dayType !== 'WORKING'
 
               return (
                 <tr key={row.id} className={isFriday ? 'bg-slate-50' : undefined}>
@@ -124,6 +141,45 @@ export function DailyRowsTable({
                   <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">
                     {dayName} {String(dayNumber).padStart(2, '0')}
                   </td>
+                  {showOvertimeSplit && (
+                    <td className="min-w-[150px] px-2 py-1.5">
+                      <div className="space-y-1">
+                        <Select
+                          name="dayType"
+                          options={TIMESHEET_DAY_TYPES.map((value) => ({
+                            value,
+                            label: TIMESHEET_DAY_TYPE_LABELS[value],
+                          }))}
+                          defaultValue={dayType}
+                          disabled={readOnly}
+                          onSelect={(value) =>
+                            updateRow(row.id, {
+                              dayType: value as TimesheetDayType,
+                              workingHours: value === 'WORKING' ? row.workingHours : 0,
+                              leaveType:
+                                value === 'LEAVE'
+                                  ? (row.leaveType ?? 'ANNUAL')
+                                  : null,
+                            })
+                          }
+                        />
+                        {dayType === 'LEAVE' && (
+                          <Select
+                            name="leaveType"
+                            options={REQUESTABLE_LEAVE_TYPES.map((value) => ({
+                              value,
+                              label: LEAVE_TYPE_LABELS[value],
+                            }))}
+                            defaultValue={row.leaveType ?? 'ANNUAL'}
+                            disabled={readOnly}
+                            onSelect={(value) =>
+                              updateRow(row.id, { leaveType: value as LeaveType })
+                            }
+                          />
+                        )}
+                      </div>
+                    </td>
+                  )}
                   <td className="px-2 py-1.5">
                     <input
                       name="startTime"
@@ -150,7 +206,7 @@ export function DailyRowsTable({
                       min="0"
                       max="24"
                       value={row.workingHours}
-                      disabled={readOnly}
+                      disabled={readOnly || notWorking}
                       onChange={(event) =>
                         updateRow(row.id, {
                           workingHours: Number(event.target.value) || 0,
@@ -202,7 +258,7 @@ export function DailyRowsTable({
           </tbody>
           <tfoot className="border-t border-slate-200 bg-slate-50 font-medium text-slate-700">
             <tr>
-              <td className="px-2 py-2" colSpan={3}>
+              <td className="px-2 py-2" colSpan={showOvertimeSplit ? 4 : 3}>
                 Total
               </td>
               <td className="px-2 py-2">{totalWorking}</td>

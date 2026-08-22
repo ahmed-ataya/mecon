@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache'
 import { db } from '../db'
 import { documentSchema, fieldErrors } from '../validation'
 import { THIRD_PARTY_CERTIFICATE, type OwnerType } from '../enums'
+import { requireDelete, requireWrite } from '../auth/guard'
+import { logAudit } from '../audit'
 
 /**
  * `values` echoes the submitted form back on failure. React resets a form once
@@ -90,6 +92,8 @@ export async function createDocument(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const user = await requireWrite()
+
   const values = readDocumentForm(formData)
   const parsed = documentSchema.safeParse(values)
 
@@ -99,13 +103,21 @@ export async function createDocument(
 
   const { ownerType, ownerId, approvedFor, ...fields } = parsed.data
 
-  await db.document.create({
+  const document = await db.document.create({
     data: {
       ...fields,
       ownerType,
       [OWNER_FK[ownerType]]: ownerId,
       approvedFor: { create: approvedFor.map((body) => ({ body })) },
     },
+  })
+
+  await logAudit({
+    user,
+    action: 'CREATE',
+    entityType: 'Document',
+    entityId: document.id,
+    entityLabel: fields.documentType,
   })
 
   revalidatePath(`/${OWNER_PATH[ownerType]}/${ownerId}`)
@@ -118,6 +130,8 @@ export async function updateDocument(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const user = await requireWrite()
+
   const values = readDocumentForm(formData)
   const parsed = documentSchema.safeParse(values)
 
@@ -158,17 +172,35 @@ export async function updateDocument(
     await deleteBlob(existing.fileUrl)
   }
 
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'Document',
+    entityId: id,
+    entityLabel: fields.documentType,
+  })
+
   revalidatePath(`/${OWNER_PATH[ownerType]}/${ownerId}`)
   revalidatePath(`/${OWNER_PATH[ownerType]}`)
   return { ok: true }
 }
 
 export async function deleteDocument(id: string) {
+  const user = await requireDelete()
+
   const document = await db.document.findUnique({ where: { id } })
   if (!document) return
 
   await db.document.delete({ where: { id } })
   await deleteBlob(document.fileUrl)
+
+  await logAudit({
+    user,
+    action: 'DELETE',
+    entityType: 'Document',
+    entityId: document.id,
+    entityLabel: document.documentType,
+  })
 
   const ownerType = document.ownerType as OwnerType
   const ownerId =

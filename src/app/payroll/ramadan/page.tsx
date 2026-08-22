@@ -3,8 +3,10 @@ import { formatDate } from '@/lib/dates'
 import { loadRamadanPeriods } from '@/lib/payroll-queries'
 import { deleteRamadanPeriod } from '@/lib/actions/ramadan'
 import { RamadanPeriodForm } from '@/components/payroll/RamadanPeriodForm'
+import { requirePayrollPage } from '@/lib/auth/guard'
 
 export default async function RamadanPeriodsPage() {
+  await requirePayrollPage()
   const periods = await loadRamadanPeriods()
 
   return (

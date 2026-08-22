@@ -11,12 +11,15 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { CompletenessCard } from '@/components/documents/CompletenessBar'
 import { DocumentsSection } from '@/components/documents/DocumentsSection'
 import { buttonSecondaryClass } from '@/components/ui/form'
+import { requirePageUser } from '@/lib/auth/guard'
+import { canDelete, canWrite } from '@/lib/permissions'
 
 export default async function CustomerDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
+  const currentUser = await requirePageUser()
   const { id } = await params
 
   const customer = await db.customer.findUnique({
@@ -57,12 +60,14 @@ export default async function CustomerDetailPage({
               </p>
             )}
           </div>
-          <Link
-            href={`/customers/${customer.id}/edit`}
-            className={buttonSecondaryClass}
-          >
-            Edit
-          </Link>
+          {canWrite(currentUser.role) && (
+            <Link
+              href={`/customers/${customer.id}/edit`}
+              className={buttonSecondaryClass}
+            >
+              Edit
+            </Link>
+          )}
         </div>
       </div>
 
@@ -110,6 +115,8 @@ export default async function CustomerDetailPage({
         ownerType="CUSTOMER"
         ownerId={customer.id}
         documents={documents}
+        canWrite={canWrite(currentUser.role)}
+        canDelete={canDelete(currentUser.role)}
       />
     </div>
   )

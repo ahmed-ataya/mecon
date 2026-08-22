@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { db } from '../db'
 import { customerSchema, fieldErrors } from '../validation'
+import { requireDelete, requireWrite } from '../auth/guard'
+import { logAudit } from '../audit'
 
 /**
  * `values` echoes the submitted form back on failure. React resets a form once
@@ -31,6 +33,8 @@ export async function createCustomer(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const user = await requireWrite()
+
   const values = readCustomerForm(formData)
   const parsed = customerSchema.safeParse(values)
 
@@ -39,6 +43,14 @@ export async function createCustomer(
   }
 
   const customer = await db.customer.create({ data: parsed.data })
+
+  await logAudit({
+    user,
+    action: 'CREATE',
+    entityType: 'Customer',
+    entityId: customer.id,
+    entityLabel: customer.name,
+  })
 
   revalidatePath('/customers')
   redirect(`/customers/${customer.id}`)
@@ -49,6 +61,8 @@ export async function updateCustomer(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const user = await requireWrite()
+
   const values = readCustomerForm(formData)
   const parsed = customerSchema.safeParse(values)
 
@@ -56,7 +70,15 @@ export async function updateCustomer(
     return { errors: fieldErrors(parsed.error), values }
   }
 
-  await db.customer.update({ where: { id }, data: parsed.data })
+  const customer = await db.customer.update({ where: { id }, data: parsed.data })
+
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'Customer',
+    entityId: customer.id,
+    entityLabel: customer.name,
+  })
 
   revalidatePath('/customers')
   revalidatePath(`/customers/${id}`)
@@ -64,6 +86,8 @@ export async function updateCustomer(
 }
 
 export async function deleteCustomer(id: string) {
+  const user = await requireDelete()
+
   // Documents cascade with the customer. Contracts do not — a customer with
   // contract history must not be silently removed, so this refuses instead.
   const contractCount = await db.contract.count({ where: { customerId: id } })
@@ -74,7 +98,15 @@ export async function deleteCustomer(id: string) {
     }
   }
 
-  await db.customer.delete({ where: { id } })
+  const customer = await db.customer.delete({ where: { id } })
+
+  await logAudit({
+    user,
+    action: 'DELETE',
+    entityType: 'Customer',
+    entityId: customer.id,
+    entityLabel: customer.name,
+  })
 
   revalidatePath('/customers')
   redirect('/customers')

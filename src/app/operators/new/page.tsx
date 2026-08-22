@@ -2,8 +2,11 @@ import Link from 'next/link'
 import { OperatorForm } from '@/components/operators/OperatorForm'
 import { createOperator } from '@/lib/actions/operators'
 import { loadEquipmentTypeOptions } from '@/lib/equipment-options'
+import { requirePageUser } from '@/lib/auth/guard'
+import { canViewPayroll } from '@/lib/permissions'
 
 export default async function NewOperatorPage() {
+  const currentUser = await requirePageUser()
   const equipmentTypeOptions = await loadEquipmentTypeOptions()
 
   return (
@@ -30,6 +33,7 @@ export default async function NewOperatorPage() {
           equipmentTypeOptions={equipmentTypeOptions}
           submitLabel="Create employee"
           cancelHref="/operators"
+          canViewPayroll={canViewPayroll(currentUser.role)}
         />
       </div>
     </div>

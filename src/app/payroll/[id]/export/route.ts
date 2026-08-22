@@ -3,6 +3,8 @@ import { monthLabel } from '@/lib/timesheet'
 import { toCsv } from '@/lib/csv'
 import { formatAmountExact } from '@/lib/money'
 import { loadPayrollPeriod } from '@/lib/payroll-queries'
+import { getCurrentUser } from '@/lib/auth/session'
+import { canViewPayroll } from '@/lib/permissions'
 
 /** Payroll register for accounts — every payslip in the period, one row
  * each. Not the WPS/SIF bank file (deferred, see ROADMAP.md Phase E3) —
@@ -12,6 +14,11 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const user = await getCurrentUser()
+  if (!user || !canViewPayroll(user.role)) {
+    return new NextResponse('Payroll is visible to Admin only.', { status: 403 })
+  }
+
   const { id } = await params
   const period = await loadPayrollPeriod(id)
 

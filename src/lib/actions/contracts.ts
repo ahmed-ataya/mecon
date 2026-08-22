@@ -10,6 +10,8 @@ import {
   fieldErrors,
   operatorAssignmentSchema,
 } from '../validation'
+import { requireWrite } from '../auth/guard'
+import { logAudit } from '../audit'
 
 /** `values` echoes the submitted form back on failure — see actions/customers.ts */
 export type ActionState = {
@@ -52,6 +54,7 @@ export async function createContract(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const user = await requireWrite()
   const values = readForm(formData)
 
   const contract = contractSchema.safeParse(values)
@@ -106,6 +109,14 @@ export async function createContract(
     },
   })
 
+  await logAudit({
+    user,
+    action: 'CREATE',
+    entityType: 'Contract',
+    entityId: created.id,
+    entityLabel: created.projectName,
+  })
+
   revalidatePath('/contracts')
   return { ok: true, id: created.id }
 }
@@ -115,6 +126,7 @@ export async function updateContract(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const user = await requireWrite()
   const values = readForm(formData)
   const parsed = contractSchema.safeParse(values)
 
@@ -122,7 +134,15 @@ export async function updateContract(
     return { errors: fieldErrors(parsed.error), values }
   }
 
-  await db.contract.update({ where: { id }, data: parsed.data })
+  const contract = await db.contract.update({ where: { id }, data: parsed.data })
+
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'Contract',
+    entityId: contract.id,
+    entityLabel: contract.projectName,
+  })
 
   revalidatePath('/contracts')
   revalidatePath(`/contracts/${id}`)
@@ -151,6 +171,7 @@ export async function replaceEquipment(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const user = await requireWrite()
   const values = readForm(formData)
   const parsed = equipmentAssignmentSchema.safeParse(values)
 
@@ -193,6 +214,14 @@ export async function replaceEquipment(
     }),
   ])
 
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'Contract',
+    entityId: outgoing.contractId,
+    entityLabel: 'Machine replaced',
+  })
+
   revalidatePath('/contracts')
   revalidatePath(`/contracts/${outgoing.contractId}`)
 
@@ -204,9 +233,19 @@ export async function endEquipmentAssignment(
   assignmentId: string,
   endDate: Date,
 ) {
+  const user = await requireWrite()
+
   const assignment = await db.equipmentAssignment.update({
     where: { id: assignmentId },
     data: { endDate },
+  })
+
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'Contract',
+    entityId: assignment.contractId,
+    entityLabel: 'Equipment assignment ended',
   })
 
   revalidatePath('/contracts')
@@ -223,6 +262,7 @@ export async function replaceOperator(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const user = await requireWrite()
   const values = readForm(formData)
   const parsed = operatorAssignmentSchema.safeParse(values)
 
@@ -267,6 +307,14 @@ export async function replaceOperator(
       },
     }),
   ])
+
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'Contract',
+    entityId: outgoing.contractId,
+    entityLabel: 'Operator replaced',
+  })
 
   revalidatePath('/contracts')
   revalidatePath(`/contracts/${outgoing.contractId}`)

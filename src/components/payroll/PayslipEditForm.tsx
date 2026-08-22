@@ -21,6 +21,8 @@ export type PayslipData = {
   standardHours: number
   regularHours: number
   overtimeHours: number
+  paidLeaveHours: number
+  unpaidLeaveHours: number
   deductionsAmount: number
   deductionsNote: string | null
 }
@@ -45,6 +47,8 @@ export function PayslipEditForm({
 
   const [regularHours, setRegularHours] = useState(payslip.regularHours)
   const [overtimeHours, setOvertimeHours] = useState(payslip.overtimeHours)
+  const [paidLeaveHours, setPaidLeaveHours] = useState(payslip.paidLeaveHours)
+  const [unpaidLeaveHours, setUnpaidLeaveHours] = useState(payslip.unpaidLeaveHours)
   const [deductionsRiyals, setDeductionsRiyals] = useState(
     toRiyalInput(payslip.deductionsAmount),
   )
@@ -61,6 +65,8 @@ export function PayslipEditForm({
     standardHours: payslip.standardHours,
     regularHours,
     overtimeHours,
+    paidLeaveHours,
+    unpaidLeaveHours,
     deductionsAmount,
   })
 
@@ -110,6 +116,44 @@ export function PayslipEditForm({
               hourly rate below.
             </p>
           )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field
+              label="Paid leave hours"
+              htmlFor="paidLeaveHours"
+              hint="Approved leave that doesn't count against pay."
+            >
+              <input
+                id="paidLeaveHours"
+                name="paidLeaveHours"
+                type="number"
+                step="0.5"
+                min="0"
+                value={paidLeaveHours}
+                disabled={readOnly}
+                onChange={(event) => setPaidLeaveHours(Number(event.target.value) || 0)}
+                className={inputClass}
+              />
+            </Field>
+
+            <Field
+              label="Unpaid leave hours"
+              htmlFor="unpaidLeaveHours"
+              hint="Deducted the same as a genuine gap."
+            >
+              <input
+                id="unpaidLeaveHours"
+                name="unpaidLeaveHours"
+                type="number"
+                step="0.5"
+                min="0"
+                value={unpaidLeaveHours}
+                disabled={readOnly}
+                onChange={(event) => setUnpaidLeaveHours(Number(event.target.value) || 0)}
+                className={inputClass}
+              />
+            </Field>
+          </div>
 
           <Field
             label="Deductions (QAR)"

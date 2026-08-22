@@ -5,12 +5,14 @@ import { loadPayslip } from '@/lib/payroll-queries'
 import { updatePayslip, regeneratePayslip } from '@/lib/actions/payroll'
 import { PayslipEditForm } from '@/components/payroll/PayslipEditForm'
 import { buttonSecondaryClass } from '@/components/ui/form'
+import { requirePayrollPage } from '@/lib/auth/guard'
 
 export default async function PayslipDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
+  await requirePayrollPage()
   const { id } = await params
   const payslip = await loadPayslip(id)
 

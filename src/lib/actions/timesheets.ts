@@ -17,7 +17,11 @@ import {
   formatTimesheetNumber,
   nextTimesheetSequence,
 } from '../timesheet-number'
+import { resolveLeaveDaysInRange } from '../leave'
+import type { LeaveType } from '../enums'
 import { fieldErrors, timesheetCreateSchema } from '../validation'
+import { requireWrite } from '../auth/guard'
+import { logAudit } from '../audit'
 
 export type CreateActionState = {
   errors?: Record<string, string>
@@ -49,6 +53,10 @@ function readDayRows(formData: FormData) {
   const workingHoursRaw = formData.getAll('workingHours').map(String)
   const breakdownHoursRaw = formData.getAll('breakdownHours').map(String)
   const remarksRaw = formData.getAll('remarks').map(String)
+  // Only present on the operator table (Phase E2) — absent entirely on the
+  // equipment form, which never submits these inputs at all.
+  const dayTypesRaw = formData.getAll('dayType').map(String)
+  const leaveTypesRaw = formData.getAll('leaveType').map(String)
 
   const rows: {
     id: string
@@ -57,6 +65,8 @@ function readDayRows(formData: FormData) {
     workingHours: number
     breakdownHours: number
     remarks: string | null
+    dayType: string
+    leaveType: string | null
   }[] = []
 
   for (let i = 0; i < ids.length; i++) {
@@ -77,6 +87,8 @@ function readDayRows(formData: FormData) {
       workingHours,
       breakdownHours,
       remarks: remarksRaw[i]?.trim() || null,
+      dayType: dayTypesRaw[i]?.trim() || 'WORKING',
+      leaveType: leaveTypesRaw[i]?.trim() || null,
     })
   }
 
@@ -85,12 +97,65 @@ function readDayRows(formData: FormData) {
 
 class RowValidationError extends Error {}
 
+/**
+ * Phase E2 — which of an operator's days in this range are already covered
+ * by an APPROVED leave request or a declared public holiday, so a new
+ * timesheet's days default to showing leave as leave rather than an
+ * unworked gap (see OperatorTimesheetDay's model comment). Equipment
+ * timesheets never call this — a machine doesn't take leave.
+ */
+async function resolveOperatorDayTypes(
+  operatorId: string,
+  days: Date[],
+): Promise<Map<number, { dayType: string; leaveType: string | null }>> {
+  const map = new Map<number, { dayType: string; leaveType: string | null }>()
+  if (days.length === 0) return map
+
+  const rangeStart = days[0]
+  const rangeEnd = days[days.length - 1]
+
+  const [approvedRequests, publicHolidays] = await Promise.all([
+    db.leaveRequest.findMany({
+      where: {
+        employeeId: operatorId,
+        status: 'APPROVED',
+        startDate: { lte: rangeEnd },
+        endDate: { gte: rangeStart },
+      },
+    }),
+    db.publicHoliday.findMany({
+      where: { startDate: { lte: rangeEnd }, endDate: { gte: rangeStart } },
+    }),
+  ])
+
+  const resolved = resolveLeaveDaysInRange({
+    rangeStart,
+    rangeEnd,
+    approvedRequests: approvedRequests.map((r) => ({
+      leaveType: r.leaveType as LeaveType,
+      startDate: r.startDate,
+      endDate: r.endDate,
+      paidOverride: r.paidOverride,
+    })),
+    publicHolidays,
+    // Irrelevant here — only dayType/leaveType are read, never payFraction
+    // (that's resolved fresh at payroll time from the same leave data).
+    priorSickDaysThisServiceYear: 0,
+  })
+
+  for (const day of resolved) {
+    map.set(day.date.getTime(), { dayType: day.dayType, leaveType: day.leaveType })
+  }
+  return map
+}
+
 // --- Equipment timesheets ---------------------------------------------------
 
 export async function createEquipmentTimesheet(
   _prev: CreateActionState,
   formData: FormData,
 ): Promise<CreateActionState> {
+  const user = await requireWrite()
   const values = readCreateForm(formData)
   const parsed = timesheetCreateSchema.safeParse(values)
 
@@ -164,6 +229,14 @@ export async function createEquipmentTimesheet(
     },
   })
 
+  await logAudit({
+    user,
+    action: 'CREATE',
+    entityType: 'EquipmentTimesheet',
+    entityId: timesheet.id,
+    entityLabel: timesheet.referenceNumber,
+  })
+
   revalidatePath('/timesheets')
   redirect(`/timesheets/equipment/${timesheet.id}`)
 }
@@ -173,6 +246,8 @@ export async function updateEquipmentTimesheetDays(
   _prev: UpdateDaysActionState,
   formData: FormData,
 ): Promise<UpdateDaysActionState> {
+  const user = await requireWrite()
+
   const timesheet = await db.equipmentTimesheet.findUnique({
     where: { id: timesheetId },
     select: { status: true },
@@ -208,14 +283,32 @@ export async function updateEquipmentTimesheetDays(
     ),
   )
 
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'EquipmentTimesheet',
+    entityId: timesheetId,
+    entityLabel: null,
+  })
+
   revalidatePath(`/timesheets/equipment/${timesheetId}`)
   return { ok: true }
 }
 
 export async function signEquipmentTimesheet(id: string) {
-  await db.equipmentTimesheet.update({
+  const user = await requireWrite()
+
+  const timesheet = await db.equipmentTimesheet.update({
     where: { id },
     data: { status: 'SIGNED', signedDate: todayUtc() },
+  })
+
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'EquipmentTimesheet',
+    entityId: timesheet.id,
+    entityLabel: 'Signed',
   })
 
   revalidatePath(`/timesheets/equipment/${id}`)
@@ -223,9 +316,19 @@ export async function signEquipmentTimesheet(id: string) {
 }
 
 export async function unsignEquipmentTimesheet(id: string) {
-  await db.equipmentTimesheet.update({
+  const user = await requireWrite()
+
+  const timesheet = await db.equipmentTimesheet.update({
     where: { id },
     data: { status: 'DRAFT', signedDate: null },
+  })
+
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'EquipmentTimesheet',
+    entityId: timesheet.id,
+    entityLabel: 'Unsigned',
   })
 
   revalidatePath(`/timesheets/equipment/${id}`)
@@ -238,6 +341,7 @@ export async function createOperatorTimesheet(
   _prev: CreateActionState,
   formData: FormData,
 ): Promise<CreateActionState> {
+  const user = await requireWrite()
   const values = readCreateForm(formData)
   const parsed = timesheetCreateSchema.safeParse(values)
 
@@ -303,6 +407,8 @@ export async function createOperatorTimesheet(
     nextTimesheetSequence(OPERATOR_TIMESHEET_PREFIX, existingNumbers),
   )
 
+  const dayTypes = await resolveOperatorDayTypes(assignment.operatorId, days)
+
   const timesheet = await db.operatorTimesheet.create({
     data: {
       referenceNumber,
@@ -310,12 +416,29 @@ export async function createOperatorTimesheet(
       year,
       month,
       days: {
-        create: days.map((date) => ({
-          date,
-          workingHours: defaultHoursForDay(date, OPERATOR_DEFAULT_HOURS_PER_DAY),
-        })),
+        create: days.map((date) => {
+          const resolved = dayTypes.get(date.getTime())
+          return {
+            date,
+            // No hours "worked" on a leave or public-holiday day — see
+            // OperatorTimesheetDay's model comment.
+            workingHours: resolved
+              ? 0
+              : defaultHoursForDay(date, OPERATOR_DEFAULT_HOURS_PER_DAY),
+            dayType: resolved?.dayType ?? 'WORKING',
+            leaveType: resolved?.leaveType ?? null,
+          }
+        }),
       },
     },
+  })
+
+  await logAudit({
+    user,
+    action: 'CREATE',
+    entityType: 'OperatorTimesheet',
+    entityId: timesheet.id,
+    entityLabel: timesheet.referenceNumber,
   })
 
   revalidatePath('/timesheets')
@@ -327,6 +450,8 @@ export async function updateOperatorTimesheetDays(
   _prev: UpdateDaysActionState,
   formData: FormData,
 ): Promise<UpdateDaysActionState> {
+  const user = await requireWrite()
+
   const timesheet = await db.operatorTimesheet.findUnique({
     where: { id: timesheetId },
     select: { status: true },
@@ -357,19 +482,39 @@ export async function updateOperatorTimesheetDays(
           workingHours: row.workingHours,
           breakdownHours: row.breakdownHours,
           remarks: row.remarks,
+          dayType: row.dayType,
+          leaveType: row.dayType === 'WORKING' ? null : row.leaveType,
         },
       }),
     ),
   )
+
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'OperatorTimesheet',
+    entityId: timesheetId,
+    entityLabel: null,
+  })
 
   revalidatePath(`/timesheets/operator/${timesheetId}`)
   return { ok: true }
 }
 
 export async function signOperatorTimesheet(id: string) {
-  await db.operatorTimesheet.update({
+  const user = await requireWrite()
+
+  const timesheet = await db.operatorTimesheet.update({
     where: { id },
     data: { status: 'SIGNED', signedDate: todayUtc() },
+  })
+
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'OperatorTimesheet',
+    entityId: timesheet.id,
+    entityLabel: 'Signed',
   })
 
   revalidatePath(`/timesheets/operator/${id}`)
@@ -377,9 +522,19 @@ export async function signOperatorTimesheet(id: string) {
 }
 
 export async function unsignOperatorTimesheet(id: string) {
-  await db.operatorTimesheet.update({
+  const user = await requireWrite()
+
+  const timesheet = await db.operatorTimesheet.update({
     where: { id },
     data: { status: 'DRAFT', signedDate: null },
+  })
+
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'OperatorTimesheet',
+    entityId: timesheet.id,
+    entityLabel: 'Unsigned',
   })
 
   revalidatePath(`/timesheets/operator/${id}`)

@@ -4,10 +4,12 @@ import { parseCapacity } from './capacity'
 import {
   APPROVAL_BODIES,
   ARRANGEMENTS,
+  BANKS,
   CAPACITY_UNITS,
   DOCUMENT_TYPES_BY_OWNER,
   EMPLOYEE_CATEGORIES,
   EQUIPMENT_ASSIGNMENT_REASONS,
+  LEAVE_TYPES,
   OPERATOR_ASSIGNMENT_REASONS,
   OPERATOR_SOURCES,
   OWNER_TYPES,
@@ -15,6 +17,8 @@ import {
   SITES,
   THIRD_PARTY_CERTIFICATE,
   THIRD_PARTY_TYPES_BY_OWNER,
+  USER_ROLES,
+  type Bank,
 } from './enums'
 import { parseDateInput } from './dates'
 import { parseQar } from './money'
@@ -157,6 +161,28 @@ export const operatorSchema = z.object({
   nationality: optionalText,
   source: z.enum(OPERATOR_SOURCES, { message: 'Select a source' }),
   notes: optionalText,
+  // Phase E2 — a real gap found while scoping leave: nothing recorded when
+  // someone joined, and E4's future gratuity calc needs an exit date too.
+  // Both optional: neither has real data yet for the imported roster.
+  dateOfJoining: optionalDate,
+  dateOfExit: optionalDate,
+  // Phase E2 — per-employee override of the statutory annual leave
+  // entitlement (days/year). Blank means "use the statutory default by
+  // service length" (src/lib/leave.ts).
+  annualLeaveEntitlementOverrideDays: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value, ctx) => {
+      if (value === undefined || value === '') return null
+
+      const days = Number(value)
+      if (!Number.isFinite(days) || days < 0) {
+        ctx.addIssue({ code: 'custom', message: 'Entitlement must be a positive number of days' })
+        return z.NEVER
+      }
+      return Math.round(days)
+    }),
   // Phase E3 — payroll. All optional: not every employee has salary data
   // entered yet, and payroll generation skips (never zero-fills) anyone
   // missing basicSalary. Minimum-wage compliance is checked separately
@@ -169,7 +195,9 @@ export const operatorSchema = z.object({
   otherAllowance: moneyField('Other allowance'),
   housingProvidedInKind: z.boolean(),
   foodProvidedInKind: z.boolean(),
-  bankName: optionalText,
+  bankName: optionalText.refine((value) => value === null || BANKS.includes(value as Bank), {
+    message: 'Select a valid bank',
+  }),
   bankAccountNumber: optionalText,
 })
 
@@ -449,6 +477,73 @@ export const ramadanPeriodSchema = z
   })
 
 export type RamadanPeriodInput = z.infer<typeof ramadanPeriodSchema>
+
+// --- Leave — Phase E2 --------------------------------------------------------
+
+export const leaveRequestSchema = z
+  .object({
+    employeeId: z.string().trim().min(1, 'Select an employee'),
+    leaveType: z.enum(LEAVE_TYPES, { message: 'Select a leave type' }),
+    startDate: requiredDate('Start date'),
+    endDate: requiredDate('End date'),
+    // Only meaningful for a type without a fixed statutory pay rule
+    // (Emergency, chiefly) — null follows the type's default. Sick leave's
+    // tiering always ignores this. See src/lib/leave.ts.
+    paidOverride: z
+      .string()
+      .trim()
+      .optional()
+      .transform((value) => (value === 'true' ? true : value === 'false' ? false : null)),
+    note: optionalText,
+  })
+  .refine((data) => data.endDate >= data.startDate, {
+    message: 'End date cannot be before the start date',
+    path: ['endDate'],
+  })
+
+export type LeaveRequestInput = z.infer<typeof leaveRequestSchema>
+
+export const publicHolidaySchema = z
+  .object({
+    name: z.string().trim().min(1, 'Holiday name is required'),
+    startDate: requiredDate('Start date'),
+    endDate: requiredDate('End date'),
+  })
+  .refine((data) => data.endDate >= data.startDate, {
+    message: 'End date cannot be before the start date',
+    path: ['endDate'],
+  })
+
+export type PublicHolidayInput = z.infer<typeof publicHolidaySchema>
+
+// --- Access control -----------------------------------------------------
+
+const emailField = z.email('Enter a valid email address').trim().toLowerCase()
+
+export const userCreateSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required'),
+  email: emailField,
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  role: z.enum(USER_ROLES, { message: 'Select a role' }),
+})
+
+export type UserCreateInput = z.infer<typeof userCreateSchema>
+
+/** Password is optional on edit — blank means "leave it unchanged." */
+export const userUpdateSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required'),
+  email: emailField,
+  password: z
+    .string()
+    .trim()
+    .transform((value) => (value === '' ? null : value))
+    .refine((value) => value === null || value.length >= 8, {
+      message: 'Password must be at least 8 characters',
+    }),
+  role: z.enum(USER_ROLES, { message: 'Select a role' }),
+})
+
+export type UserUpdateInput = z.infer<typeof userUpdateSchema>
 
 /** Flatten zod issues into { field: message } for rendering next to inputs. */
 export function fieldErrors(error: z.ZodError): Record<string, string> {

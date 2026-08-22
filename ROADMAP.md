@@ -330,8 +330,9 @@ used downstream — never the default):
   "8 hrs when not assigned to equipment" case from the original spec
   doesn't apply to this build — see scope note below.)
 - Vacation days show as 0, marked distinctly as vacation — not absence, not
-  unworked. **Deferred**: needs Phase E2 (leave management), not built yet.
-  Every day defaults to Working for now.
+  unworked. **Resolved by Phase E2** (2026-08-21): `OperatorTimesheetDay`
+  gained `dayType`/`leaveType`, defaulted from approved leave at generation
+  time. See Phase E2 below.
 
 **Footer**: total working/breakdown/regular/overtime hours as applicable.
 Signature blocks: operator, client site representative, company
@@ -548,9 +549,117 @@ Category mapping involved a few judgment calls on ambiguous titles (CAMP
 BOSS → Management, WS OFFICE BOY → Mechanic/Workshop) — see the script's
 header comment for the full list; flag any that read wrong.
 
-### E2 — Leave management
+### E2 — Leave management ✅ Done (encashment deferred — see below)
 
-**Statutory entitlements**:
+Built 2026-08-21. Touches three systems, per the original scope: leave
+itself, timesheets (day-type), and payroll (shortfall calculation).
+
+**Gap found while scoping, fixed as part of this phase**: nothing recorded
+when an employee joined. Annual leave eligibility ("after 1 full year"),
+the 3-week/4-week service tier, and E4's future gratuity calc all
+fundamentally need it. Added `Employee.dateOfJoining` — schema field only,
+no real data yet (the imported 50-person roster never had it), fills in as
+the business supplies it, same pattern `employeeNumber` followed in an
+earlier phase. `Employee.dateOfExit` added alongside it, as asked — also
+schema-only for now. **Encashment itself (paying out unused annual leave on
+exit) is still not built** — it needs a real settlement calculation this
+phase didn't scope; `dateOfExit` existing is only the precondition, not the
+feature.
+
+**Four judgment calls the business hasn't confirmed yet** — asked directly,
+answer was "need to check with the business" for all four, so each was
+built to the safer/statutory-literal default and isolated in one place so
+correcting it later is a small change, not a rework. Added to Open
+Questions below:
+- Leave days consumed = calendar days including Friday (not working-days-
+  only) — `leaveDaysConsumed` in `src/lib/leave.ts`.
+- Sick leave's 3 pay tiers (2wk full / 4wk half / remainder unpaid) tracked
+  cumulatively across the current SERVICE YEAR, not reset per illness spell
+  — `sickLeavePayTiers`.
+- Emergency leave defaults to unpaid (not in the statutory articles at all,
+  a company benefit) — overridable per request via `paidOverride`.
+- Hajj leave has no religion field to gate it — the type is just available
+  to record for anyone; office manages actual eligibility/priority
+  manually. This one's a design call, not really an open question — no
+  sensitive personal-data field for one narrow rule.
+
+**Other decisions made while building, consistent with the codebase's
+existing conventions**:
+- **Balance is computed, not stored** — same "status is always derived"
+  principle as document status, contract status and the overtime split
+  (NOTES.md). `computeAnnualLeaveBalance` in `src/lib/leave.ts` walks every
+  completed service year from the join-date anniversary, carrying forward
+  up to half of each year's unused entitlement (Art. 79), then prorates the
+  current still-open year by elapsed fraction. No accrual before the
+  1-year eligibility mark.
+- **Leave year = 12-month cycle from the join-date anniversary**, not the
+  calendar year — makes "eligible after 1 year" and the 5-year tier bump
+  mean something per-employee.
+- **"Approval" is a status field only** — confirmed scope, no real
+  approval trail, since there's no user-account system yet. `decidedBy` is
+  free text for whoever is at the keyboard.
+- A public holiday inside an approved ANNUAL request doesn't consume a
+  balance day (Art. 79's "leave extends by that day"), implemented as an
+  exclusion from the day count rather than literally pushing the end date.
+
+**Timesheet wiring**: `OperatorTimesheetDay` gained `dayType`
+(WORKING/LEAVE/PUBLIC_HOLIDAY) and `leaveType`, defaulted from that
+operator's APPROVED leave requests and declared public holidays when a
+timesheet is generated (`resolveOperatorDayTypes` in
+`src/lib/actions/timesheets.ts`), editable afterward the same way hours
+are. `DailyRowsTable` shows a Day type column (operator sheets only —
+equipment timesheets never call this, a machine doesn't take leave).
+Equipment timesheets untouched — out of scope, see the phase's original
+scoping note.
+
+**Payroll wiring**: `computePayslip` (`src/lib/payroll.ts`) now takes
+`paidLeaveHours`/`unpaidLeaveHours`. Explained hours = worked + paid leave +
+unpaid leave; only the unexplained remainder AND unpaid leave get deducted
+— paid leave no longer reads as a shortfall. This applies to **every**
+employee, not just operators with signed timesheets — an ESTIMATE-sourced
+employee's assumed-full-attendance hours are now reduced by their known
+leave too (`leaveHoursForEmployeePeriod` in `src/lib/actions/payroll.ts`),
+otherwise unpaid leave would have zero payroll effect for the ~23
+non-operator staff who never get a signed timesheet. `Payslip` gained
+`paidLeaveHours`/`unpaidLeaveHours` columns, shown and editable on the
+payslip screen and the print page.
+
+**Shipped**: `LeaveRequest`/`PublicHoliday` models, `src/lib/leave.ts`
+(entitlement/accrual/balance/day-counting/sick-tier — all pure functions),
+`src/lib/employee-status.ts` (derived Active/On leave/Exited), request/
+approve/reject/cancel actions, a leave list, request form, detail page
+with approve/reject, a month calendar (filterable by category and by the
+employee's current contract site, pulled from their active
+`OperatorAssignment`), a public holidays settings page (mirrors
+`RamadanPeriod`'s pattern), and a Leave section on the employee detail page
+showing the live balance and request history. Nav link added.
+
+Verified against real data, not synthetic: gave Rajesh Kumar a join date
+2 years 3 months back (2024-05-10) and hand-verified the balance before
+trusting the screen — entitlement 5.98 days (21 × prorated elapsed
+fraction of his 2nd eligible service year), 10.5 carried in (half of a
+fully-unused first eligible year), 0 taken, 13.48 after balance = 16.48.
+The app produced exactly that. Requested and approved 3 days of Annual
+leave (24–26 Aug 2026); balance correctly dropped to 13.48. Generated an
+August 2026 operator timesheet on his real Lusail Boulevard assignment —
+the 3 leave days correctly showed `Leave / Annual leave` with 0 hours
+instead of a blank gap; every other day defaulted Working as before.
+Signed it and ran payroll: hand-verified the full chain before trusting
+the screen — 23 working days × 10hrs = 230 total (184 regular + 46 OT,
+matching the existing 8/10hr split), 24hrs of paid leave correctly
+excluded from the shortfall, but the pre-existing 1-day gap (his
+assignment starts Aug 2, a real gap from before E2 ever existed) still
+correctly deducted 8hrs unpaid — shortfall QAR 100, overtime QAR 718.75,
+basic pay QAR 3,618.75, gross/net QAR 4,418.75. The app matched exactly.
+Separately hand-verified `sickLeavePayTiers`/`resolveLeaveDaysInRange`
+against three cases via script: 20 days from scratch → 14 full + 6 half;
+10 more days after 10 already used → 4 full + 6 half (continues the
+cumulative count correctly); 50 days from scratch → 14 full + 28 half + 8
+unpaid, exactly matching Art. 82's 2-week/4-week/remainder split. Test
+data (leave request, timesheet, payroll period, and the fabricated join
+date/salary) removed afterward.
+
+**Statutory entitlements** (spec, for reference):
 - **Annual leave (Art. 79)** — eligible after 1 full year continuous
   service. Minimum 3 weeks/year under 5 years' service, 4 weeks at 5+ years.
   Pro-rated for partial years.
@@ -566,18 +675,22 @@ header comment for the full list; flag any that read wrong.
   consume a leave day — leave extends by that day. Build this into the
   calculation, don't just document it.
 
-**Features**: leave types (Annual, Sick [full/half/unpaid tiers], Unpaid,
-Hajj, Maternity, Emergency, Public Holiday); entitlement per employee,
-defaulting to statutory by service length, overridable where the company
-pays more; accrual and running balance; carry-over up to half of annual
-leave into the following year; request/approval flow; leave calendar
-(filterable by category and site); **leave encashment** — unused annual
-leave paid out on exit, system calculates the balance owed.
+**Features, all shipped except encashment**: leave types (Annual, Sick
+[tiered pay], Unpaid, Hajj, Maternity, Emergency, Public Holiday);
+entitlement per employee, defaulting to statutory by service length,
+overridable where the company pays more; accrual and running balance;
+carry-over up to half of annual leave into the following year; request/
+approval flow; leave calendar (filterable by category and site). **Leave
+encashment — unused annual leave paid out on exit — not built this
+phase.** `dateOfExit` now exists (added this phase) so it's no longer
+blocked, but the settlement calculation itself is new scope, likely
+alongside E4 (gratuity), since both compute a final-settlement figure.
 
-**Downstream effects**: feeds timesheet auto-fill (a leave day shows as
-leave, not absence/unworked). **Unpaid leave is excluded from continuous
-service for gratuity purposes; paid annual leave is included** — this
-distinction must be stored correctly or gratuity comes out wrong.
+**Downstream effects, shipped**: feeds timesheet auto-fill (a leave day
+shows as leave, not absence/unworked — see Timesheet wiring above).
+**Unpaid leave vs. paid annual leave for gratuity's continuous-service
+calculation** — still relevant for E4, not resolved by this phase; E4
+will need to read `LeaveRequest.leaveType` when it's built.
 
 ### E3 — Payroll ✅ Done (WPS export deferred — see below)
 
@@ -605,8 +718,11 @@ real hours to read from.
 - **Deductions are a flat amount + note per payslip**, not a full loan/
   advance ledger with balances and repayment schedules — nobody's asked
   for that yet.
-- **Leave pay and gratuity are out of scope** — both need Phase E2/E4,
-  neither exists yet. Flagged here so it's a known gap, not a silent one.
+- **Leave pay and gratuity are out of scope** — both need Phase E2/E4.
+  **Leave pay resolved by Phase E2** (2026-08-21): `computePayslip` now
+  takes `paidLeaveHours`/`unpaidLeaveHours` and only unpaid leave (plus any
+  genuinely unexplained gap) is deducted — see Phase E2 below. Gratuity
+  (E4) is still out of scope.
 
 **Salary structure per employee**: basic, allowances (housing, transport,
 food, site, other), recurring deductions (advances, loans, fines).
@@ -723,10 +839,132 @@ track last ticket taken/allowance paid and next entitlement date; whether
 entitlement is a ticket in kind or cash allowance; alert when due, especially
 if it coincides with planned annual leave.
 
+### Phase F — Access control and per-bank WPS export
+
+Raised by the user mid-session 2026-08-21, outside the original 5-phase plan
+— two separate change requests. Built 2026-08-21/22.
+
+**Checked first, as explicitly asked, before building anything**: this app
+had NO role or account system at all going in — the only access control
+was `src/proxy.ts`'s shared HTTP Basic-auth password (no accounts, no
+roles, no audit trail, by its own doc comment). Every "override" elsewhere
+in the codebase (mobilization charge, document checklist, leave pay) is a
+business-rule override, never an access-control one — there was no
+existing "override authority" logic to extend. This was a full new system,
+not an extension.
+
+**Login mechanism — confirmed with the user before building**: email +
+password per person (not a shared password with roles bolted on — that
+would make the audit trail worthless, since anyone with the password could
+claim to be anyone). The old shared-password gate is fully replaced, not
+layered underneath.
+
+**Shipped**:
+- `User` (email/password/role), `Session` (opaque token, DB-backed — not a
+  JWT, trivially revocable), `AuditLog` models. Password hashing via
+  Node's built-in `scrypt` — no new dependency, same reasoning `src/proxy.ts`
+  already used for its own timing-safe compare.
+- `src/proxy.ts` rewritten: checks for a valid session, redirects to
+  `/login` otherwise. Runs in the Node.js runtime (Next 16's new default
+  for Proxy — confirmed in `node_modules/next/dist/docs` before writing
+  this, since AGENTS.md flags this app as having Next-version-specific
+  breaking changes), so a real Prisma session lookup here is safe; no Edge
+  workaround needed.
+- `src/lib/permissions.ts` (pure role → capability checks) and
+  `src/lib/auth/guard.ts` (the same checks backed by a real session
+  lookup, for Server Actions and pages). **Every mutating Server Action in
+  the app** — all 11 `src/lib/actions/*.ts` files, ~40 functions — now
+  calls `requireWrite()`/`requireDelete()`/`requirePayrollAccess()` before
+  touching the database, and logs an `AuditLog` row after. This is the
+  real enforcement boundary: a request that bypasses the UI entirely still
+  can't do anything a role shouldn't. Next's own guidance is explicit that
+  Proxy alone isn't sufficient — every Server Function must check for
+  itself — so that's what these do.
+- **Payroll/salary locked to Admin**: all 6 `/payroll/*` pages and the
+  register-export route check `requirePayrollPage()`/an inline
+  `canViewPayroll` check; the employee form's salary/bank fieldset is
+  server-stripped from the page payload for anyone who can't see it (not
+  just hidden in the client — the numbers never reach a non-Admin's
+  browser at all).
+- User management (`/admin/users`, Admin only): create, edit, delete,
+  reset a password (no email infrastructure exists for a "forgot
+  password" flow, so an Admin resets directly). Blocks an Admin from
+  demoting themselves out of the only Admin account, and from deleting
+  their own account while signed in as it.
+- Audit log viewer (`/admin/audit`, Admin only): latest 200 entries, who/
+  when/action/record.
+- `scripts/create-user.ts` — one-off bootstrap script (the database starts
+  with zero users), also reusable for a manual password reset. First
+  Admin account created for the user directly in this session.
+
+**Known gap — UI button-hiding is only partially rolled out.** The spec
+was explicit that "the UI must hide actions a role cannot perform, not
+just fail on submit," and that's done for the nav bar (Payroll/Users/
+Audit log links), `DocumentsSection` (shared across Customers/Equipment/
+Operators — Add/Edit/Delete all gated), and the Customers detail page's
+Edit button. It is **not yet done** on Equipment, Operators (beyond the
+payroll fieldset), Contracts, Invoices, LPOs, Timesheets, or Leave — those
+pages' Edit/Delete buttons still render for every role today. This is a
+UX gap, not a security one: the server-side guards above block the
+action regardless of what the UI shows, confirmed by the fact every
+action file was swept, not just some. Flagged rather than silently left
+implied by an unqualified "done."
+
+**WPS export, per bank**: bank became a field on the employee record
+(`Employee.bankName`, constrained to `BANKS` in `src/lib/enums.ts` — a
+closed list now, since it decides which SIF file a payslip lands in,
+unlike most of this app's free-text fields). `src/lib/wps.ts` holds each
+bank's field layout as its own config, per the user's explicit
+instruction not to guess.
+
+- **CBQ — done.** Built directly from a real sample SIF file the business
+  supplied (`SIF_12943300_CBQ_20260818_1353.csv`) — a two-block CSV: an
+  employer/payer header row, then one row per employee. Not the QCB fixed-
+  width spec; this is what CBQ's own system expects from this employer
+  specifically. The sample contained real employee QIDs, bank accounts and
+  salaries — treated as sensitive per the user's instruction, never
+  reproduced in this doc or anywhere else; only the company's own payer
+  details (Employer QID, Payer IBAN) were kept, the same way `COMPANY`'s
+  own invoice letterhead details already are.
+- **QNB — not started.** No sample file yet; `WPS_PAYER_CONFIG` has no QNB
+  entry, and the export page shows "Field layout not yet configured" for
+  it rather than guessing. Confirmed with the user: build CBQ now (covers
+  the great majority of staff), add QNB once its file arrives — no rework
+  needed, it's a second entry in the same config plus a second generator
+  function alongside `generateCbqSif`.
+- **Pre-submission validation, built**: blocks export per bank with a
+  named list of what's missing — no bank assigned, no IBAN, or no valid
+  (non-expired) Qatar ID/Visa-Residence-Permit document — rather than
+  producing a file the bank would reject. QID/Visa validity reuses the
+  existing document-expiry system (`getDocumentStatus`) rather than a new
+  field, so it can never disagree with what the Documents tab already
+  shows.
+
+Verified against real data, not synthetic: gave Rajesh Kumar a basic
+salary, CBQ as his bank, and a real IBAN; generated an August 2026 payroll
+period and downloaded the CBQ SIF. The output matched the sample's
+structure field-for-field, including the "Total Records" zero-padding and
+the "Number of Working days" convention (calendar days in the month, not
+business working days). His Qatar ID number was pulled correctly from his
+existing Document record. Basic + Extra income − Deductions reconciled
+exactly to Net Salary (3000 + 800 − 0 = 3800) — deliberately exact, unlike
+the sample file's own arithmetic, which didn't always reconcile cleanly on
+a couple of its rows. Separately hand-verified the blocking validation
+against three synthetic cases (no bank, expired QID, clean record) — each
+flagged or passed exactly as expected. Test data removed afterward.
+
+Full user/role verification (Admin confirmed working end-to-end; a
+Viewer/Operations account was created and its `canWrite`/`canDelete`/
+`canViewPayroll` matrix hand-verified against the spec, then removed) —
+not yet re-verified live in the browser under an actual Operations or
+Viewer login post-sweep, since the sweep landed after that check. Worth a
+quick pass before this is called fully done.
+
 ### Qatar-specific items — confirm with client before building
 
 - **End of service gratuity** — accrued liability per employee (E4, above).
-- **WPS** — payroll must export in the bank's required SIF format.
+- **WPS** — payroll must export in the bank's required SIF format. CBQ
+  done (Phase F); QNB still needs its own sample file.
 - **Residence permit / QID expiry** — hard compliance item, same alerting
   tier as other documents, escalated harder (E1).
 - **Annual leave entitlement** under Qatar Labour Law, and how the company
@@ -765,3 +1003,26 @@ if it coincides with planned annual leave.
 8. *(Carried from the original Phase B doc, now resolved)* ~~Operators vs
    Employees — one table or two?~~ **Answered: single Employee table with a
    category field.**
+9. *(Raised 2026-08-21, Phase E2)* When annual leave spans a Friday, does
+   it consume 7 calendar days or 6 (Friday excluded as an existing rest
+   day)? Built to calendar-days-including-Friday for now
+   (`leaveDaysConsumed` in `src/lib/leave.ts`) — matches the statutory "3
+   weeks = 21 days" phrasing literally. Still open — user needs to ask the
+   business.
+10. *(Raised 2026-08-21, Phase E2)* Is sick leave's 3-tier pay rule (2wk
+    full / 4wk half / remainder unpaid) tracked cumulatively across the
+    service year, or reset per illness spell? Built cumulative
+    (`sickLeavePayTiers`). Still open — user needs to ask the business.
+11. *(Raised 2026-08-21, Phase E2)* Should Emergency leave be paid or
+    unpaid by default — it isn't in the statutory articles, it's a company
+    benefit. Built unpaid by default, overridable per request. Still open
+    — user needs to ask the business.
+12. *(Raised 2026-08-21, built 2026-08-21/22)* ~~Role-based access
+    control~~ — see **Phase F** below. Foundation, server-side enforcement,
+    payroll lockdown, audit trail and user management are done; UI-level
+    button-hiding is only partially rolled out across the app. Not fully
+    resolved — see Phase F for exactly what's left.
+13. *(Raised 2026-08-21, CBQ built 2026-08-22)* **WPS export, per-bank.**
+    CBQ done and verified against a real sample SIF file. **QNB still
+    blocked** — no sample file received yet; do not guess at its layout.
+    See Phase F.

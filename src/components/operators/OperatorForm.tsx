@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import type { Employee } from '@prisma/client'
 import {
+  BANKS,
+  BANK_LABELS,
   EMPLOYEE_CATEGORIES,
   EMPLOYEE_CATEGORY_LABELS,
   OPERATOR_SOURCES,
@@ -11,6 +13,7 @@ import {
   type EmployeeCategory,
 } from '@/lib/enums'
 import { toRiyalInput } from '@/lib/money'
+import { toDateInputValue } from '@/lib/dates'
 import { checkMinimumWage } from '@/lib/payroll'
 import { Select } from '@/components/ui/Select'
 import { MultiCombobox } from '@/components/ui/MultiCombobox'
@@ -32,6 +35,7 @@ export function OperatorForm({
   qualifiedTypes = [],
   submitLabel,
   cancelHref,
+  canViewPayroll,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
   operator?: Employee
@@ -42,6 +46,11 @@ export function OperatorForm({
   qualifiedTypes?: string[]
   submitLabel: string
   cancelHref: string
+  /** Access control — salary/bank data is Admin only (src/lib/permissions.ts).
+   * The page passing `operator` down has already stripped these fields for
+   * anyone this is false for, so this only controls whether the fieldset
+   * renders at all — never trust the client alone, see the update action. */
+  canViewPayroll: boolean
 }) {
   const [state, formAction, pending] = useActionState(action, {})
   const errors = state.errors ?? {}
@@ -59,6 +68,14 @@ export function OperatorForm({
     nationality: values?.nationality ?? operator?.nationality ?? '',
     source: values?.source ?? operator?.source ?? OPERATOR_SOURCES[0],
     notes: values?.notes ?? operator?.notes ?? '',
+    dateOfJoining:
+      values?.dateOfJoining ?? toDateInputValue(operator?.dateOfJoining) ?? '',
+    dateOfExit: values?.dateOfExit ?? toDateInputValue(operator?.dateOfExit) ?? '',
+    annualLeaveEntitlementOverrideDays:
+      values?.annualLeaveEntitlementOverrideDays ??
+      (operator?.annualLeaveEntitlementOverrideDays != null
+        ? String(operator.annualLeaveEntitlementOverrideDays)
+        : ''),
     qualifiedTypes: values?.qualifiedEquipmentTypes ?? qualifiedTypes,
     basicSalary: values?.basicSalary ?? toRiyalInput(operator?.basicSalary),
     housingAllowance:
@@ -195,6 +212,63 @@ export function OperatorForm({
         </Field>
       </div>
 
+      <fieldset className="space-y-5 rounded-md border border-slate-200 p-4">
+        <legend className="px-1 text-sm font-medium text-slate-700">
+          Leave
+        </legend>
+
+        <div className="grid gap-5 sm:grid-cols-3">
+          <Field
+            label="Date of joining"
+            htmlFor="dateOfJoining"
+            hint="Drives annual leave eligibility and accrual."
+          >
+            <input
+              id="dateOfJoining"
+              name="dateOfJoining"
+              type="date"
+              defaultValue={initial.dateOfJoining}
+              className={inputClass}
+            />
+            {errors.dateOfJoining && (
+              <p className="mt-1 text-xs text-red-600">{errors.dateOfJoining}</p>
+            )}
+          </Field>
+
+          <Field label="Date of exit" htmlFor="dateOfExit" hint="Leave blank while active.">
+            <input
+              id="dateOfExit"
+              name="dateOfExit"
+              type="date"
+              defaultValue={initial.dateOfExit}
+              className={inputClass}
+            />
+            {errors.dateOfExit && (
+              <p className="mt-1 text-xs text-red-600">{errors.dateOfExit}</p>
+            )}
+          </Field>
+
+          <Field
+            label="Annual leave override (days/year)"
+            htmlFor="annualLeaveEntitlementOverrideDays"
+            hint="Blank uses the statutory default (21, 28 at 5+ years)."
+          >
+            <input
+              id="annualLeaveEntitlementOverrideDays"
+              name="annualLeaveEntitlementOverrideDays"
+              inputMode="numeric"
+              defaultValue={initial.annualLeaveEntitlementOverrideDays}
+              className={inputClass}
+            />
+            {errors.annualLeaveEntitlementOverrideDays && (
+              <p className="mt-1 text-xs text-red-600">
+                {errors.annualLeaveEntitlementOverrideDays}
+              </p>
+            )}
+          </Field>
+        </div>
+      </fieldset>
+
       {category === 'OPERATOR' && (
         <Field
           label="Machines qualified to operate"
@@ -210,6 +284,7 @@ export function OperatorForm({
         </Field>
       )}
 
+      {canViewPayroll && (
       <fieldset className="space-y-5 rounded-md border border-slate-200 p-4">
         <legend className="px-1 text-sm font-medium text-slate-700">
           Payroll
@@ -327,12 +402,16 @@ export function OperatorForm({
         </Field>
 
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Bank name" htmlFor="bankName">
-            <input
-              id="bankName"
+          <Field
+            label="Bank"
+            htmlFor="bankName"
+            hint="Determines which WPS SIF file this employee's pay goes out on."
+          >
+            <Select
               name="bankName"
+              placeholder="Select a bank"
+              options={BANKS.map((value) => ({ value, label: BANK_LABELS[value] }))}
               defaultValue={initial.bankName}
-              className={inputClass}
             />
           </Field>
 
@@ -349,6 +428,7 @@ export function OperatorForm({
           </Field>
         </div>
       </fieldset>
+      )}
 
       <Field label="Notes" htmlFor="notes">
         <textarea

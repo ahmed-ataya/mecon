@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { db } from '../db'
 import { fieldErrors, lpoSchema } from '../validation'
+import { requireDelete, requireWrite } from '../auth/guard'
+import { logAudit } from '../audit'
 
 /** `values` echoes the submitted form back on failure — see actions/customers.ts */
 export type ActionState = {
@@ -25,6 +27,7 @@ export async function createLpo(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const user = await requireWrite()
   const values = readForm(formData)
   const parsed = lpoSchema.safeParse(values)
 
@@ -46,6 +49,14 @@ export async function createLpo(
 
   const lpo = await db.lpo.create({ data: parsed.data })
 
+  await logAudit({
+    user,
+    action: 'CREATE',
+    entityType: 'Lpo',
+    entityId: lpo.id,
+    entityLabel: lpo.number,
+  })
+
   revalidatePath('/lpos')
   redirect(`/lpos/${lpo.id}`)
 }
@@ -55,6 +66,7 @@ export async function updateLpo(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const user = await requireWrite()
   const values = readForm(formData)
   const parsed = lpoSchema.safeParse(values)
 
@@ -73,7 +85,15 @@ export async function updateLpo(
     }
   }
 
-  await db.lpo.update({ where: { id }, data: parsed.data })
+  const lpo = await db.lpo.update({ where: { id }, data: parsed.data })
+
+  await logAudit({
+    user,
+    action: 'UPDATE',
+    entityType: 'Lpo',
+    entityId: lpo.id,
+    entityLabel: lpo.number,
+  })
 
   revalidatePath('/lpos')
   revalidatePath(`/lpos/${id}`)
@@ -82,6 +102,8 @@ export async function updateLpo(
 }
 
 export async function deleteLpo(id: string) {
+  const user = await requireDelete()
+
   // Contracts point at the LPO; removing it underneath them would leave their
   // commercial basis unrecorded.
   const contractCount = await db.contract.count({ where: { lpoId: id } })
@@ -92,7 +114,15 @@ export async function deleteLpo(id: string) {
     }
   }
 
-  await db.lpo.delete({ where: { id } })
+  const lpo = await db.lpo.delete({ where: { id } })
+
+  await logAudit({
+    user,
+    action: 'DELETE',
+    entityType: 'Lpo',
+    entityId: lpo.id,
+    entityLabel: lpo.number,
+  })
 
   revalidatePath('/lpos')
   redirect('/lpos')
