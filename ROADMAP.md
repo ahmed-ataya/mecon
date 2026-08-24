@@ -1072,7 +1072,8 @@ category of gap as Phase F's UI-button-hiding rollout: a UX consistency
 gap, not a functional one — every page still works, it just doesn't all
 look the same yet.
 
-Not yet committed — built on `feat/shell-audit-ux`.
+Committed to `feat/shell-audit-ux` (`f3815bf`) and pushed to GitHub —
+Vercel built a Preview deployment from it automatically.
 
 **Neon branch isolation — caught late, then fixed.** The original
 instruction was to create a matching Neon database branch before
@@ -1097,6 +1098,36 @@ status` confirmed the new branch already carries all 15 migrations
 live. Net effect: the migration and the now-deleted test customer did
 touch the shared dev database before this fix landed, but nothing
 destructive happened and no further work will.
+
+**Two Neon projects existed, and the wrong one was assumed to be
+"production."** Verifying the Preview deployment surfaced a second,
+bigger mix-up: this Neon *account* has two projects, `Mecon-dev` (used
+throughout this phase, above) and a separately-named one holding the
+*actual* data Vercel's Production and Preview environments both read
+from — confirmed by querying it directly and finding real customer
+records. That real database had zero user accounts, which is the actual
+reason the Preview login failed ("wrong password") — not a password
+issue, there was no account to log into. Resolved by getting a
+`VERCEL_TOKEN` from the user, using it to confirm the Preview env var's
+scope, then creating the first Admin account directly in the real
+database via `scripts/create-user.ts`. Also confirms Vercel's Preview
+build already ran `prisma migrate deploy` against that real database
+when the branch was pushed — additive-only so far (this phase's own
+migrations), but worth remembering next time a schema change here is
+more than additive. Full account, including how it was diagnosed, in
+NOTES.md's "Two Neon projects exist, and their names don't tell you
+which is real."
+
+**Table-alignment polish, found live on the Preview deployment.** Three
+pre-existing list pages (Equipment, Customers, Employees — none touched
+by this phase's own build) vertically-center each `<td>` independently,
+so a row with a wrapped machine name/model sits at a different height
+than its neighbors, and the "N expired"/"N expiring" label next to the
+document-status badge could itself wrap onto two lines. Fixed by aligning
+every cell to the row's top edge (`[&_td]:align-top` on each `<table>`)
+and stopping that short status label from wrapping
+(`whitespace-nowrap`) — `src/app/equipment/page.tsx`,
+`src/app/customers/page.tsx`, `src/app/operators/page.tsx`.
 
 ### Qatar-specific items — confirm with client before building
 

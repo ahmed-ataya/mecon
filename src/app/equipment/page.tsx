@@ -61,7 +61,7 @@ export default async function EquipmentPage({
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm [&_td]:align-top">
             <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3 font-medium">Unit</th>
@@ -110,7 +110,7 @@ export default async function EquipmentPage({
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <StatusBadge status={status} />
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs whitespace-nowrap text-slate-500">
                           {total === 0
                             ? 'none on file'
                             : [

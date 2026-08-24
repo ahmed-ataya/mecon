@@ -211,6 +211,41 @@ driver adapter at runtime in `src/lib/db.ts`. Prisma 7 also no longer loads
 `.env` automatically — `prisma.config.ts` and `prisma/seed.ts` both import
 `dotenv/config` themselves.
 
+## Two Neon projects exist, and their names don't tell you which is real
+
+Discovered 2026-08-22 debugging a "wrong password" report on a fresh Vercel
+Preview deployment. The Neon org has two projects:
+
+- **`Mecon-dev`** (`misty-recipe-07429781`) — the one this project's `.env`
+  has always pointed local development at. Reasonable to assume this is
+  "the" database. It is not.
+- **`curly-union-02384540`** — an auto-generated project name, easy to
+  overlook. **This is the one Vercel's `DATABASE_URL` (scoped to both
+  Production and Preview in the dashboard) actually points at** —
+  confirmed by querying it directly and finding real customer records,
+  not seed/test data.
+
+The giveaway that something was wrong: an Admin account created (and later
+password-reset) against `Mecon-dev`'s `production` branch didn't fix a
+login failure on the live Preview URL, because that URL was never reading
+from `Mecon-dev` in the first place. Vercel's dashboard won't reveal a
+`Sensitive`-flagged env var's value (not in the UI, not via `vercel env
+pull` — it returns the literal string `[SENSITIVE]`), so the only way to
+find the real target was to query each Neon project's data directly and
+see which one had the app's actual business records.
+
+**Lesson**: don't assume which Neon project a deployed environment
+variable points to from a plausible-sounding name — verify by querying
+data, the same way this was actually resolved. This also means Vercel's
+Preview environment shares the *same* database as Production (per
+DEPLOY.md's env var setup — both variables were added to "all
+environments"), so **any migration that runs during a Preview build's
+`vercel-build` step (`prisma migrate deploy`) applies to the real
+production database**, not a sandboxed copy. Additive-only migrations
+(a new nullable column, a new table) are low-risk there; anything
+destructive deserves a moment's pause before pushing a branch that
+triggers a Preview build.
+
 ## Creating an isolated Neon branch for feature work
 
 `npx neonctl@latest` works without a global install. It needs an API key
