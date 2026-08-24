@@ -1064,13 +1064,28 @@ forcing a full remount (and therefore a fresh `useState`) on every filter
 change — correct anyway, since any accumulated "Load more" state should
 be discarded on a new filter.
 
-**Known gap — breadcrumb rollout is not app-wide.** `PageHeader` (the
-shell's breadcrumb + title component) is only wired into the audit log
-page so far. The other ~25-30 existing list/detail pages still use their
-original inline `<h1>` + back-link pattern from before this phase. Same
-category of gap as Phase F's UI-button-hiding rollout: a UX consistency
-gap, not a functional one — every page still works, it just doesn't all
-look the same yet.
+**Breadcrumb rollout — closed 2026-08-23.** `PageHeader` now covers every
+list page (10), every record detail page (10), and the 4 specialized
+pages that had their own back-link+title pattern (leave calendar, public
+holidays, Ramadan periods, payslip detail) — 24 pages total, converted in
+one pass and spot-checked live across roughly a third of them. Two
+extensions were needed to fit every existing page's markup:
+`PageHeader` gained an optional `badge` slot (a status pill inline with
+the title — contract status, invoice state, document completeness, etc.)
+and `description` widened from `string` to `ReactNode` (a few pages put
+a link inside their description, e.g. a contract's customer name).
+Excluded on purpose: the 4 print pages (letterhead layout, must never
+show app chrome), `new`/`edit` forms (different UX — Save/Cancel live in
+the form itself, not a header actions slot), and `login`/the root
+redirect (no session, no shell).
+
+**Real bug found and fixed during the spot-check, unrelated to the
+rollout itself**: `DailyRowsTable` (every timesheet detail page) put a
+hidden `<input>` directly under a `<tr>`, invalid HTML that was silently
+breaking hydration on every load — caught via the browser's own console,
+not visually. Moved inside the row's first `<td>`; confirmed against the
+live DOM afterward, since the console panel intermittently held a stale
+error from before the fix and had to be double-checked directly.
 
 Committed to `feat/shell-audit-ux` (`f3815bf`) and pushed to GitHub —
 Vercel built a Preview deployment from it automatically.
