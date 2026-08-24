@@ -14,6 +14,7 @@ import { buttonSecondaryClass } from '@/components/ui/form'
 import { findDeletionRecord } from '@/lib/audit-queries'
 import { DeletedRecordNotice } from '@/components/audit/DeletedRecordNotice'
 import { RecordHistoryPanel } from '@/components/audit/RecordHistoryPanel'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 export default async function EquipmentTimesheetDetailPage({
   params,
@@ -41,37 +42,24 @@ export default async function EquipmentTimesheetDetailPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link
-          href="/timesheets"
-          className="text-sm text-slate-500 hover:text-slate-900"
-        >
-          ← Timesheets
-        </Link>
-
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {timesheet.referenceNumber}
-              </h1>
-              <span
-                className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
-                  isSigned
-                    ? 'bg-green-50 text-green-700 ring-green-200'
-                    : 'bg-slate-100 text-slate-600 ring-slate-200'
-                }`}
-              >
-                {isSigned ? 'Signed' : 'Draft'}
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-slate-500">
-              {equipment.name} · {contract.customer.name} ·{' '}
-              {contract.projectName} · {monthLabel(timesheet.year, timesheet.month)}
-            </p>
-          </div>
-
-          <div className="flex gap-3">
+      <PageHeader
+        crumb="Timesheets"
+        crumbHref="/timesheets"
+        title={timesheet.referenceNumber}
+        badge={
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
+              isSigned
+                ? 'bg-green-50 text-green-700 ring-green-200'
+                : 'bg-slate-100 text-slate-600 ring-slate-200'
+            }`}
+          >
+            {isSigned ? 'Signed' : 'Draft'}
+          </span>
+        }
+        description={`${equipment.name} · ${contract.customer.name} · ${contract.projectName} · ${monthLabel(timesheet.year, timesheet.month)}`}
+        actions={
+          <>
             <Link
               href={`/timesheets/equipment/${timesheet.id}/print`}
               className={buttonSecondaryClass}
@@ -89,16 +77,16 @@ export default async function EquipmentTimesheetDetailPage({
               signAction={signEquipmentTimesheet.bind(null, timesheet.id)}
               unsignAction={unsignEquipmentTimesheet.bind(null, timesheet.id)}
             />
-          </div>
-        </div>
+          </>
+        }
+      />
 
-        {isSigned && timesheet.signedDate && (
-          <p className="mt-2 text-xs text-slate-500">
-            Signed {toDateInputValue(timesheet.signedDate)}. Unsign to make
-            changes.
-          </p>
-        )}
-      </div>
+      {isSigned && timesheet.signedDate && (
+        <p className="text-xs text-slate-500">
+          Signed {toDateInputValue(timesheet.signedDate)}. Unsign to make
+          changes.
+        </p>
+      )}
 
       <DailyRowsTable
         days={timesheet.days.map((day) => ({

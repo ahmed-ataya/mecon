@@ -1,9 +1,9 @@
-import Link from 'next/link'
 import { formatDate } from '@/lib/dates'
 import { loadRamadanPeriods } from '@/lib/payroll-queries'
 import { deleteRamadanPeriod } from '@/lib/actions/ramadan'
 import { RamadanPeriodForm } from '@/components/payroll/RamadanPeriodForm'
 import { requirePayrollPage } from '@/lib/auth/guard'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 export default async function RamadanPeriodsPage() {
   await requirePayrollPage()
@@ -11,23 +11,12 @@ export default async function RamadanPeriodsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link
-          href="/payroll"
-          className="text-sm text-slate-500 hover:text-slate-900"
-        >
-          ← Payroll
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-          Ramadan periods
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Standard hours drop to 6/day, 36/week for any payroll day falling
-          inside one of these — no pay reduction. Dates are moon-sighting
-          based, so they&rsquo;re entered here rather than guessed at in
-          code.
-        </p>
-      </div>
+      <PageHeader
+        crumb="Payroll"
+        crumbHref="/payroll"
+        title="Ramadan periods"
+        description="Standard hours drop to 6/day, 36/week for any payroll day falling inside one of these — no pay reduction. Dates are moon-sighting based, so they’re entered here rather than guessed at in code."
+      />
 
       <RamadanPeriodForm />
 

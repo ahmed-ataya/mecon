@@ -1,29 +1,20 @@
-import Link from 'next/link'
 import { formatDate } from '@/lib/dates'
 import { loadPublicHolidays } from '@/lib/leave-queries'
 import { deletePublicHoliday } from '@/lib/actions/leave'
 import { PublicHolidayForm } from '@/components/leave/PublicHolidayForm'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 export default async function PublicHolidaysPage() {
   const holidays = await loadPublicHolidays()
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link href="/leave" className="text-sm text-slate-500 hover:text-slate-900">
-          ← Leave
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-          Public holidays
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          A public holiday landing inside an approved annual leave request
-          doesn&rsquo;t consume a day from the balance. Dates are moon-
-          sighting based for the Islamic holidays, so they&rsquo;re entered
-          here rather than guessed at in code — same reasoning as Ramadan
-          periods.
-        </p>
-      </div>
+      <PageHeader
+        crumb="Leave"
+        crumbHref="/leave"
+        title="Public holidays"
+        description="A public holiday landing inside an approved annual leave request doesn’t consume a day from the balance. Dates are moon-sighting based for the Islamic holidays, so they’re entered here rather than guessed at in code — same reasoning as Ramadan periods."
+      />
 
       <PublicHolidayForm />
 

@@ -4,6 +4,7 @@ import { formatQar } from '@/lib/money'
 import { loadPayrollPeriods } from '@/lib/payroll-queries'
 import { buttonPrimaryClass } from '@/components/ui/form'
 import { requirePayrollPage } from '@/lib/auth/guard'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 export default async function PayrollPage() {
   await requirePayrollPage()
@@ -11,26 +12,23 @@ export default async function PayrollPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Payroll</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            One period per month, covering every employee with a basic
-            salary on file.
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <Link
-            href="/payroll/ramadan"
-            className="self-center text-sm text-slate-500 hover:text-slate-900 hover:underline"
-          >
-            Ramadan periods
-          </Link>
-          <Link href="/payroll/new" className={buttonPrimaryClass}>
-            New payroll period
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title="Payroll"
+        description="One period per month, covering every employee with a basic salary on file."
+        actions={
+          <>
+            <Link
+              href="/payroll/ramadan"
+              className="self-center text-sm text-slate-500 hover:text-slate-900 hover:underline"
+            >
+              Ramadan periods
+            </Link>
+            <Link href="/payroll/new" className={buttonPrimaryClass}>
+              New payroll period
+            </Link>
+          </>
+        }
+      />
 
       {periods.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-300 bg-white px-6 py-8 text-center text-sm text-slate-500">

@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { USER_ROLE_LABELS, type UserRole } from '@/lib/enums'
 import { deleteUser } from '@/lib/actions/users'
 import { buttonPrimaryClass } from '@/components/ui/form'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 export default async function UsersPage() {
   const currentUser = await requireAdminPage()
@@ -11,17 +12,15 @@ export default async function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {users.length} account{users.length === 1 ? '' : 's'}. Admin only.
-          </p>
-        </div>
-        <Link href="/admin/users/new" className={buttonPrimaryClass}>
-          Add user
-        </Link>
-      </div>
+      <PageHeader
+        title="Users"
+        description={`${users.length} account${users.length === 1 ? '' : 's'}. Admin only.`}
+        actions={
+          <Link href="/admin/users/new" className={buttonPrimaryClass}>
+            Add user
+          </Link>
+        }
+      />
 
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         <table className="w-full text-sm">

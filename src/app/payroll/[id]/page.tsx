@@ -14,6 +14,7 @@ import { requirePayrollPage } from '@/lib/auth/guard'
 import { findDeletionRecord } from '@/lib/audit-queries'
 import { DeletedRecordNotice } from '@/components/audit/DeletedRecordNotice'
 import { RecordHistoryPanel } from '@/components/audit/RecordHistoryPanel'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 export default async function PayrollPeriodDetailPage({
   params,
@@ -41,38 +42,24 @@ export default async function PayrollPeriodDetailPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link
-          href="/payroll"
-          className="text-sm text-slate-500 hover:text-slate-900"
-        >
-          ← Payroll
-        </Link>
-
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {monthLabel(period.year, period.month)}
-              </h1>
-              <span
-                className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
-                  isFinalized
-                    ? 'bg-green-50 text-green-700 ring-green-200'
-                    : 'bg-slate-100 text-slate-600 ring-slate-200'
-                }`}
-              >
-                {isFinalized ? 'Finalized' : 'Draft'}
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-slate-500">
-              {period.payslips.length} payslip
-              {period.payslips.length === 1 ? '' : 's'} · Gross{' '}
-              {formatQar(totalGross)} · Net {formatQar(totalNet)}
-            </p>
-          </div>
-
-          <div className="flex gap-3">
+      <PageHeader
+        crumb="Payroll"
+        crumbHref="/payroll"
+        title={monthLabel(period.year, period.month)}
+        badge={
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
+              isFinalized
+                ? 'bg-green-50 text-green-700 ring-green-200'
+                : 'bg-slate-100 text-slate-600 ring-slate-200'
+            }`}
+          >
+            {isFinalized ? 'Finalized' : 'Draft'}
+          </span>
+        }
+        description={`${period.payslips.length} payslip${period.payslips.length === 1 ? '' : 's'} · Gross ${formatQar(totalGross)} · Net ${formatQar(totalNet)}`}
+        actions={
+          <>
             <Link href={`/payroll/${period.id}/export`} className={buttonSecondaryClass}>
               Export register (CSV)
             </Link>
@@ -84,26 +71,26 @@ export default async function PayrollPeriodDetailPage({
               finalizeAction={finalizePayrollPeriod.bind(null, period.id)}
               unfinalizeAction={unfinalizePayrollPeriod.bind(null, period.id)}
             />
-          </div>
-        </div>
+          </>
+        }
+      />
 
-        {isFinalized && period.finalizedDate && (
-          <p className="mt-2 text-xs text-slate-500">
-            Finalized {toDateInputValue(period.finalizedDate)}. Unfinalize to
-            make changes.
-          </p>
-        )}
+      {isFinalized && period.finalizedDate && (
+        <p className="text-xs text-slate-500">
+          Finalized {toDateInputValue(period.finalizedDate)}. Unfinalize to
+          make changes.
+        </p>
+      )}
 
-        {estimateCount > 0 && (
-          <p className="mt-3 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-inset ring-amber-200">
-            {estimateCount} payslip{estimateCount === 1 ? '' : 's'} on an
-            estimated standard month — no signed operator timesheet was
-            found for that employee this period. Edit hours directly on a
-            payslip, or sign the timesheet and reopen it to pull in real
-            hours.
-          </p>
-        )}
-      </div>
+      {estimateCount > 0 && (
+        <p className="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-inset ring-amber-200">
+          {estimateCount} payslip{estimateCount === 1 ? '' : 's'} on an
+          estimated standard month — no signed operator timesheet was
+          found for that employee this period. Edit hours directly on a
+          payslip, or sign the timesheet and reopen it to pull in real
+          hours.
+        </p>
+      )}
 
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         <table className="w-full text-sm">

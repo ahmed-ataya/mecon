@@ -26,6 +26,7 @@ import { LEAVE_STATUS_LABELS, LEAVE_TYPE_LABELS, type LeaveStatus, type LeaveTyp
 import { findDeletionRecord } from '@/lib/audit-queries'
 import { DeletedRecordNotice } from '@/components/audit/DeletedRecordNotice'
 import { RecordHistoryPanel } from '@/components/audit/RecordHistoryPanel'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 export default async function OperatorDetailPage({
   params,
@@ -84,38 +85,21 @@ export default async function OperatorDetailPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link
-          href="/operators"
-          className="text-sm text-slate-500 hover:text-slate-900"
-        >
-          ← Employees
-        </Link>
-
-        <div className="mt-2 flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {operator.name}
-              </h1>
-              <StatusBadge status={status} />
-            </div>
-            <p className="mt-1 text-sm text-slate-500">
-              {operator.jobTitle ? `${operator.jobTitle} · ` : `${categoryLabel} · `}
-              {sourceLabel}
-              {operator.nationality && ` · ${operator.nationality}`}
-              {' · '}
-              {EMPLOYEE_STATUS_LABELS[employeeStatus]}
-            </p>
-          </div>
+      <PageHeader
+        crumb="Employees"
+        crumbHref="/operators"
+        title={operator.name}
+        badge={<StatusBadge status={status} />}
+        description={`${operator.jobTitle ? `${operator.jobTitle} · ` : `${categoryLabel} · `}${sourceLabel}${operator.nationality ? ` · ${operator.nationality}` : ''} · ${EMPLOYEE_STATUS_LABELS[employeeStatus]}`}
+        actions={
           <Link
             href={`/operators/${operator.id}/edit`}
             className={buttonSecondaryClass}
           >
             Edit
           </Link>
-        </div>
-      </div>
+        }
+      />
 
       {(expired > 0 || expiringSoon > 0) && (
         <div

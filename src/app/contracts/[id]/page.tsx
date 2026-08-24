@@ -30,6 +30,7 @@ import { buttonSecondaryClass } from '@/components/ui/form'
 import { findDeletionRecord } from '@/lib/audit-queries'
 import { DeletedRecordNotice } from '@/components/audit/DeletedRecordNotice'
 import { RecordHistoryPanel } from '@/components/audit/RecordHistoryPanel'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 export default async function ContractDetailPage({
   params,
@@ -70,48 +71,40 @@ export default async function ContractDetailPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link
-          href="/contracts"
-          className="text-sm text-slate-500 hover:text-slate-900"
-        >
-          ← Contracts
-        </Link>
-
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {contract.projectName}
-              </h1>
-              <span
-                className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
-                  CONTRACT_STATUS_CLASSES[contract.status]
-                }`}
-              >
-                {CONTRACT_STATUS_LABELS[contract.status]}
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-slate-500">
-              <Link
-                href={`/customers/${contract.customer.id}`}
-                className="hover:underline"
-              >
-                {contract.customer.name}
-              </Link>
-              {' · '}
-              {contract.siteName}
-            </p>
-          </div>
-
+      <PageHeader
+        crumb="Contracts"
+        crumbHref="/contracts"
+        title={contract.projectName}
+        badge={
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
+              CONTRACT_STATUS_CLASSES[contract.status]
+            }`}
+          >
+            {CONTRACT_STATUS_LABELS[contract.status]}
+          </span>
+        }
+        description={
+          <>
+            <Link
+              href={`/customers/${contract.customer.id}`}
+              className="hover:underline"
+            >
+              {contract.customer.name}
+            </Link>
+            {' · '}
+            {contract.siteName}
+          </>
+        }
+        actions={
           <Link
             href={`/contracts/${contract.id}/edit`}
             className={buttonSecondaryClass}
           >
             Edit contract
           </Link>
-        </div>
-      </div>
+        }
+      />
 
       <WarningList warnings={contract.warnings} title="Needs attention" />
 

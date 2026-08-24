@@ -6,6 +6,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { CompletenessBadge } from '@/components/documents/CompletenessBar'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { buttonPrimaryClass } from '@/components/ui/form'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 export default async function CustomersPage({
   searchParams,
@@ -35,18 +36,15 @@ export default async function CustomersPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Customers</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {customers.length} {customers.length === 1 ? 'customer' : 'customers'}
-            {query && ' matching your search'}
-          </p>
-        </div>
-        <Link href="/customers/new" className={buttonPrimaryClass}>
-          Add customer
-        </Link>
-      </div>
+      <PageHeader
+        title="Customers"
+        description={`${customers.length} ${customers.length === 1 ? 'customer' : 'customers'}${query ? ' matching your search' : ''}`}
+        actions={
+          <Link href="/customers/new" className={buttonPrimaryClass}>
+            Add customer
+          </Link>
+        }
+      />
 
       <SearchInput placeholder="Search by name, contact, phone or email…" />
 

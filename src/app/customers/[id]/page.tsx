@@ -16,6 +16,7 @@ import { canDelete, canWrite } from '@/lib/permissions'
 import { findDeletionRecord } from '@/lib/audit-queries'
 import { DeletedRecordNotice } from '@/components/audit/DeletedRecordNotice'
 import { RecordHistoryPanel } from '@/components/audit/RecordHistoryPanel'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 export default async function CustomerDetailPage({
   params,
@@ -49,38 +50,23 @@ export default async function CustomerDetailPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link
-          href="/customers"
-          className="text-sm text-slate-500 hover:text-slate-900"
-        >
-          ← Customers
-        </Link>
-
-        <div className="mt-2 flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {customer.name}
-              </h1>
-              <StatusBadge status={status} />
-            </div>
-            {customer.contactPerson && (
-              <p className="mt-1 text-sm text-slate-500">
-                {customer.contactPerson}
-              </p>
-            )}
-          </div>
-          {canWrite(currentUser.role) && (
+      <PageHeader
+        crumb="Customers"
+        crumbHref="/customers"
+        title={customer.name}
+        badge={<StatusBadge status={status} />}
+        description={customer.contactPerson}
+        actions={
+          canWrite(currentUser.role) && (
             <Link
               href={`/customers/${customer.id}/edit`}
               className={buttonSecondaryClass}
             >
               Edit
             </Link>
-          )}
-        </div>
-      </div>
+          )
+        }
+      />
 
       {/* Legal documents must stay valid while a contract is open or an
           invoice is unpaid, so an expiry problem is surfaced up front. */}

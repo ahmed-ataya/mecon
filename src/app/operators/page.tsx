@@ -14,6 +14,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { CompletenessBadge } from '@/components/documents/CompletenessBar'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { buttonPrimaryClass } from '@/components/ui/form'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 /** "All" plus every real category — same pill-tab pattern the contracts
  * list already uses, so filtering behaves the same way everywhere. */
@@ -78,18 +79,15 @@ export default async function OperatorsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Employees</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {operators.length} {operators.length === 1 ? 'employee' : 'employees'}
-            {query && ' matching your search'}
-          </p>
-        </div>
-        <Link href="/operators/new" className={buttonPrimaryClass}>
-          Add employee
-        </Link>
-      </div>
+      <PageHeader
+        title="Employees"
+        description={`${operators.length} ${operators.length === 1 ? 'employee' : 'employees'}${query ? ' matching your search' : ''}`}
+        actions={
+          <Link href="/operators/new" className={buttonPrimaryClass}>
+            Add employee
+          </Link>
+        }
+      />
 
       <div className="flex flex-wrap gap-2">
         {CATEGORY_FILTERS.map((option) => {

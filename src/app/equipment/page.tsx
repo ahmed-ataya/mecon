@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { CompletenessBadge } from '@/components/documents/CompletenessBar'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { buttonPrimaryClass } from '@/components/ui/form'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 export default async function EquipmentPage({
   searchParams,
@@ -36,18 +37,15 @@ export default async function EquipmentPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Equipment</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {equipment.length} {equipment.length === 1 ? 'machine' : 'machines'}
-            {query && ' matching your search'}
-          </p>
-        </div>
-        <Link href="/equipment/new" className={buttonPrimaryClass}>
-          Add equipment
-        </Link>
-      </div>
+      <PageHeader
+        title="Equipment"
+        description={`${equipment.length} ${equipment.length === 1 ? 'machine' : 'machines'}${query ? ' matching your search' : ''}`}
+        actions={
+          <Link href="/equipment/new" className={buttonPrimaryClass}>
+            Add equipment
+          </Link>
+        }
+      />
 
       <SearchInput placeholder="Search by label, type, brand, model, serial or reg. no…" />
 

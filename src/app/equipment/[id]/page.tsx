@@ -17,6 +17,7 @@ import { buttonSecondaryClass } from '@/components/ui/form'
 import { findDeletionRecord } from '@/lib/audit-queries'
 import { DeletedRecordNotice } from '@/components/audit/DeletedRecordNotice'
 import { RecordHistoryPanel } from '@/components/audit/RecordHistoryPanel'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 export default async function EquipmentDetailPage({
   params,
@@ -53,40 +54,27 @@ export default async function EquipmentDetailPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link
-          href="/equipment"
-          className="text-sm text-slate-500 hover:text-slate-900"
-        >
-          ← Equipment
-        </Link>
-
-        <div className="mt-2 flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {equipment.name}
-              </h1>
-              <StatusBadge status={status} />
-            </div>
-            <p className="mt-1 text-sm text-slate-500">
-              {[
-                equipment.type,
-                [equipment.brand, equipment.model].filter(Boolean).join(' '),
-                formatCapacity(equipment.capacityValue, equipment.capacityUnit),
-              ]
-                .filter((part) => part && part !== '—')
-                .join(' · ')}
-            </p>
-          </div>
+      <PageHeader
+        crumb="Equipment"
+        crumbHref="/equipment"
+        title={equipment.name}
+        badge={<StatusBadge status={status} />}
+        description={[
+          equipment.type,
+          [equipment.brand, equipment.model].filter(Boolean).join(' '),
+          formatCapacity(equipment.capacityValue, equipment.capacityUnit),
+        ]
+          .filter((part) => part && part !== '—')
+          .join(' · ')}
+        actions={
           <Link
             href={`/equipment/${equipment.id}/edit`}
             className={buttonSecondaryClass}
           >
             Edit
           </Link>
-        </div>
-      </div>
+        }
+      />
 
       {(expired > 0 || expiringSoon > 0) && (
         <div

@@ -4,6 +4,7 @@ import { SITE_LABELS, type Site } from '@/lib/enums'
 import { ContractCard } from '@/components/contracts/ContractCard'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { buttonPrimaryClass } from '@/components/ui/form'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 /**
  * Master view. "Needs attention" is not a status — it cuts across the others,
@@ -70,19 +71,15 @@ export default async function ContractsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Contracts</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {contracts.length}{' '}
-            {contracts.length === 1 ? 'contract' : 'contracts'}
-            {query && ' matching your search'}
-          </p>
-        </div>
-        <Link href="/contracts/new" className={buttonPrimaryClass}>
-          New contract
-        </Link>
-      </div>
+      <PageHeader
+        title="Contracts"
+        description={`${contracts.length} ${contracts.length === 1 ? 'contract' : 'contracts'}${query ? ' matching your search' : ''}`}
+        actions={
+          <Link href="/contracts/new" className={buttonPrimaryClass}>
+            New contract
+          </Link>
+        }
+      />
 
       <div className="flex flex-wrap gap-2">
         {FILTERS.map((option) => {

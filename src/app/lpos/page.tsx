@@ -9,6 +9,7 @@ import {
 } from '@/lib/lpo'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { buttonPrimaryClass } from '@/components/ui/form'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 export default async function LposPage({
   searchParams,
@@ -33,18 +34,15 @@ export default async function LposPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">LPOs</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {lpos.length} {lpos.length === 1 ? 'LPO' : 'LPOs'}
-            {query && ' matching your search'}
-          </p>
-        </div>
-        <Link href="/lpos/new" className={buttonPrimaryClass}>
-          Add LPO
-        </Link>
-      </div>
+      <PageHeader
+        title="LPOs"
+        description={`${lpos.length} ${lpos.length === 1 ? 'LPO' : 'LPOs'}${query ? ' matching your search' : ''}`}
+        actions={
+          <Link href="/lpos/new" className={buttonPrimaryClass}>
+            Add LPO
+          </Link>
+        }
+      />
 
       <SearchInput placeholder="Search by LPO number or customer…" />
 

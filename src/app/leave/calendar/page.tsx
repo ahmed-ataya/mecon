@@ -8,6 +8,7 @@ import {
 } from '@/lib/enums'
 import { monthLabel } from '@/lib/timesheet'
 import { loadLeaveCalendar } from '@/lib/leave-queries'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 const LEAVE_TYPE_DOT: Record<LeaveType, string> = {
   ANNUAL: 'bg-blue-500',
@@ -83,15 +84,12 @@ export default async function LeaveCalendarPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link href="/leave" className="text-sm text-slate-500 hover:text-slate-900">
-          ← Leave
-        </Link>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {monthLabel(year, month)}
-          </h1>
-          <div className="flex gap-2">
+      <PageHeader
+        crumb="Leave"
+        crumbHref="/leave"
+        title={monthLabel(year, month)}
+        actions={
+          <>
             <Link
               href={buildHref({ year, month, category, site }, prevMonth)}
               className={pillClass(false)}
@@ -104,9 +102,9 @@ export default async function LeaveCalendarPage({
             >
               Next →
             </Link>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="space-y-2">
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">

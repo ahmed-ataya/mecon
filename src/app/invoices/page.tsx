@@ -10,6 +10,7 @@ import {
 } from '@/lib/invoice-status'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { buttonPrimaryClass } from '@/components/ui/form'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 const FILTERS = [
   { key: 'unpaid', label: 'Unpaid' },
@@ -84,17 +85,15 @@ export default async function InvoicesPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Invoices</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {formatQar(outstanding)} outstanding across {counts.unpaid} unpaid
-          </p>
-        </div>
-        <Link href="/invoices/new" className={buttonPrimaryClass}>
-          Generate invoices
-        </Link>
-      </div>
+      <PageHeader
+        title="Invoices"
+        description={`${formatQar(outstanding)} outstanding across ${counts.unpaid} unpaid`}
+        actions={
+          <Link href="/invoices/new" className={buttonPrimaryClass}>
+            Generate invoices
+          </Link>
+        }
+      />
 
       <div className="flex flex-wrap gap-2">
         {FILTERS.map((option) => {

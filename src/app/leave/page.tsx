@@ -3,6 +3,7 @@ import { formatDate } from '@/lib/dates'
 import { LEAVE_STATUS_LABELS, LEAVE_TYPE_LABELS, type LeaveStatus, type LeaveType } from '@/lib/enums'
 import { loadLeaveRequests } from '@/lib/leave-queries'
 import { buttonPrimaryClass, buttonSecondaryClass } from '@/components/ui/form'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 const STATUS_CLASSES: Record<LeaveStatus, string> = {
   PENDING: 'bg-amber-50 text-amber-700 ring-amber-200',
@@ -16,26 +17,23 @@ export default async function LeavePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Leave</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {requests.length} request{requests.length === 1 ? '' : 's'} on
-            record.
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <Link href="/leave/calendar" className={buttonSecondaryClass}>
-            Calendar
-          </Link>
-          <Link href="/leave/holidays" className={buttonSecondaryClass}>
-            Public holidays
-          </Link>
-          <Link href="/leave/new" className={buttonPrimaryClass}>
-            Request leave
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title="Leave"
+        description={`${requests.length} request${requests.length === 1 ? '' : 's'} on record.`}
+        actions={
+          <>
+            <Link href="/leave/calendar" className={buttonSecondaryClass}>
+              Calendar
+            </Link>
+            <Link href="/leave/holidays" className={buttonSecondaryClass}>
+              Public holidays
+            </Link>
+            <Link href="/leave/new" className={buttonPrimaryClass}>
+              Request leave
+            </Link>
+          </>
+        }
+      />
 
       {requests.length === 0 ? (
         <p className="text-sm text-slate-500">No leave requests yet.</p>

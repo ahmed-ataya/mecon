@@ -137,8 +137,8 @@ export function DailyRowsTable({
 
               return (
                 <tr key={row.id} className={isFriday ? 'bg-slate-50' : undefined}>
-                  <input type="hidden" name="dayId" value={row.id} />
                   <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">
+                    <input type="hidden" name="dayId" value={row.id} />
                     {dayName} {String(dayNumber).padStart(2, '0')}
                   </td>
                   {showOvertimeSplit && (

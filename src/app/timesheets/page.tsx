@@ -5,6 +5,7 @@ import {
   loadOperatorTimesheets,
 } from '@/lib/timesheet-queries'
 import { buttonPrimaryClass } from '@/components/ui/form'
+import { PageHeader } from '@/components/shell/PageHeader'
 
 const STATUS_CLASSES: Record<string, string> = {
   DRAFT: 'bg-slate-100 text-slate-600 ring-slate-200',
@@ -31,14 +32,10 @@ export default async function TimesheetsPage() {
 
   return (
     <div className="space-y-10">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Timesheets</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Equipment timesheets drive invoicing; operator timesheets drive
-          payroll. Never derived from each other, even when the numbers
-          match.
-        </p>
-      </div>
+      <PageHeader
+        title="Timesheets"
+        description="Equipment timesheets drive invoicing; operator timesheets drive payroll. Never derived from each other, even when the numbers match."
+      />
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
