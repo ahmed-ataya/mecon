@@ -839,6 +839,35 @@ track last ticket taken/allowance paid and next entitlement date; whether
 entitlement is a ticket in kind or cash allowance; alert when due, especially
 if it coincides with planned annual leave.
 
+### Future — Override authority (not started)
+
+Raised by the user 2026-08-28, no build yet — captured here so it isn't
+lost, not scoped into a concrete plan.
+
+The 3-role system built in Phase F (Admin/Operations/Viewer) is not
+fine-grained enough for where this is headed. The user wants specific
+business-rule overrides restricted to the General Manager specifically —
+not "any Admin." Concrete example given: under the duration rule, a
+rental under 30 days should be charged a mobilization charge; today
+mob/de-mob charges don't block invoice generation at all (no enforcement
+exists yet — flagged elsewhere as a real, separate gap). Once that
+enforcement exists, only the GM should be able to override it (e.g.
+waive a mob charge that would otherwise apply).
+
+**Current state**: Muhideen (Logistics,
+`logistics@meconqatar.com`) and the GM (`info@meconqatar.com`, Ataya Abu
+Samhadaneh) were both given the ADMIN role when their accounts were
+created — explicitly described by the user as "right now they are both
+the same," a deliberate, temporary equivalence, not an oversight.
+Muhideen's authority is meant to narrow later; the GM's is meant to stay
+at the top.
+
+**Not yet decided**: how to model this — a fourth role, a per-user
+override flag on top of ADMIN, or a business-rule-approval table are all
+plausible directions. Depends on how many other "only the GM can
+override X" rules turn up once mob/de-mob enforcement itself gets built
+— ask the user rather than guessing when this is picked up.
+
 ### Phase F — Access control and per-bank WPS export
 
 Raised by the user mid-session 2026-08-21, outside the original 5-phase plan
