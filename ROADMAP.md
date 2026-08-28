@@ -1144,6 +1144,54 @@ and stopping that short status label from wrapping
 (`whitespace-nowrap`) — `src/app/equipment/page.tsx`,
 `src/app/customers/page.tsx`, `src/app/operators/page.tsx`.
 
+**Full-app QA pass, 2026-08-27/28** — before handing this to the
+business, went through every major flow as a user rather than just
+reading the code: customer create/edit, a full leave request → approve
+→ cancel cycle, timesheet sign/unsign, a complete contract creation
+(customer/equipment/operator pickers, warnings, mobilization charge),
+document records, invoice generation, payroll period creation +
+finalization, and the CBQ WPS export. Everything passed. Two things
+worth recording:
+
+- **Found and fixed a real bug**: `DailyRowsTable` (every timesheet
+  detail page) had a hidden `<input>` directly under a `<tr>` — invalid
+  HTML, silently breaking React hydration on every load. Not visible to
+  the eye; caught via the browser console, then fixed and confirmed
+  against the live DOM (the console panel itself intermittently held a
+  stale pre-fix error, so it wasn't trustworthy alone).
+- **False alarm, worth recording anyway**: a generated invoice showed
+  line items for "Crane" and "Wheel Excavator" on a contract whose
+  current machine is named "Boom Truck 6x4 #2" — looked like it billed
+  the wrong equipment. Traced it: invoice lines print by equipment
+  *type* + capacity (the business's own convention), and that machine's
+  `type` field is literally "Crane." The billing engine had also
+  correctly split the invoice across a mid-month breakdown replacement,
+  computing each machine's hours separately. Genuinely correct, not a
+  bug — but exactly the kind of thing that has to be traced to the
+  bottom rather than either trusted or flagged on a hunch.
+
+One real gap in this pass: file upload itself (the literal bytes →
+Vercel Blob path) can't be driven through browser-automation tooling —
+no way to operate the OS's native file-picker dialog. Everything around
+it (the document record, the completeness rule requiring a real file)
+was verified; the upload mechanic itself wasn't.
+
+**Design polish — two items closed, 2026-08-28.** Of the four
+improvements flagged after reviewing the new shell: replaced every
+native `confirm()` dialog (unsigning a timesheet, unfinalizing payroll,
+deleting a document) with a shared `useConfirmDialog()` hook
+(`src/components/ui/ConfirmDialog.tsx`) styled to match the rest of the
+app — same await-the-answer control flow as `window.confirm()`, so the
+swap didn't touch surrounding logic. Also paginated the Change history
+panel (5 at a time, `loadMoreRecordHistoryQuery`, same cursor pattern as
+the audit log's own "Load more") so a long-lived record's edit history
+can't turn its detail page into an endless scroll. The other two
+(consistent loading-state treatment across every mutating button, a
+deliberate color-vocabulary audit across every status badge) were
+deliberately deferred — lower payoff for the effort right now, better
+done once real usage shows which parts of the UI actually get touched
+most.
+
 ### Qatar-specific items — confirm with client before building
 
 - **End of service gratuity** — accrued liability per employee (E4, above).
