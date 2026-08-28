@@ -3,6 +3,7 @@
 import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { buttonPrimaryClass, buttonSecondaryClass } from '@/components/ui/form'
+import { useConfirmDialog } from '@/components/ui/ConfirmDialog'
 
 /**
  * The signature is what makes a timesheet usable downstream — signing locks
@@ -21,9 +22,10 @@ export function SignButton({
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const { confirm, dialog } = useConfirmDialog()
 
-  function handleClick() {
-    if (signed && !confirm('Unsign this timesheet? It can be edited again once unsigned.')) {
+  async function handleClick() {
+    if (signed && !(await confirm('Unsign this timesheet? It can be edited again once unsigned.'))) {
       return
     }
 
@@ -34,13 +36,16 @@ export function SignButton({
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={isPending}
-      className={signed ? buttonSecondaryClass : buttonPrimaryClass}
-    >
-      {isPending ? 'Working…' : signed ? 'Unsign' : 'Mark signed'}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={isPending}
+        className={signed ? buttonSecondaryClass : buttonPrimaryClass}
+      >
+        {isPending ? 'Working…' : signed ? 'Unsign' : 'Mark signed'}
+      </button>
+      {dialog}
+    </>
   )
 }

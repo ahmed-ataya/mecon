@@ -9,6 +9,7 @@ import {
 } from '@/lib/enums'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { buttonSecondaryClass } from '@/components/ui/form'
+import { useConfirmDialog } from '@/components/ui/ConfirmDialog'
 import {
   createDocument,
   deleteDocument,
@@ -68,6 +69,7 @@ export function DocumentsSection({
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const { confirm, dialog } = useConfirmDialog()
 
   // null = nothing open, 'new' = add form, otherwise the id being edited.
   const [openForm, setOpenForm] = useState<string | null>(null)
@@ -77,8 +79,8 @@ export function DocumentsSection({
     router.refresh()
   }, [router])
 
-  function handleDelete(id: string, label: string) {
-    if (!confirm(`Delete the ${label}? This cannot be undone.`)) return
+  async function handleDelete(id: string, label: string) {
+    if (!(await confirm(`Delete the ${label}? This cannot be undone.`))) return
 
     startTransition(async () => {
       await deleteDocument(id)
@@ -88,6 +90,7 @@ export function DocumentsSection({
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white">
+      {dialog}
       <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
         <div>
           <h2 className="font-semibold">Documents</h2>

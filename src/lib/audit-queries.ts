@@ -183,14 +183,43 @@ export async function loadAuditFilterOptions() {
   }
 }
 
-/** One record's full history, most recent first — the per-record "Change
- * history" panel (Stage 3). The (entityType, entityId) index is what
- * keeps this fast regardless of how large the overall log gets. */
+const RECORD_HISTORY_PAGE_SIZE = 5
+
+/** One record's history, most recent first — the per-record "Change
+ * history" panel. Paginated the same way the audit log itself is: a long-
+ * lived record (a contract edited 40 times over a year) would otherwise
+ * render an ever-growing stack of cards on its own detail page. The
+ * (entityType, entityId) index is what keeps this fast regardless of how
+ * large the overall log gets. First page only; loadMoreRecordHistoryQuery
+ * continues it with a real cursor. */
 export async function loadRecordHistory(entityType: string, entityId: string) {
-  return db.auditLog.findMany({
+  const entries = await db.auditLog.findMany({
     where: { entityType, entityId },
     orderBy: { createdAt: 'desc' },
+    take: RECORD_HISTORY_PAGE_SIZE + 1,
   })
+
+  const hasMore = entries.length > RECORD_HISTORY_PAGE_SIZE
+  return { entries: entries.slice(0, RECORD_HISTORY_PAGE_SIZE), hasMore }
+}
+
+/** Cursor-based continuation for loadRecordHistory — see
+ * loadMoreAuditEntriesQuery for why cursor, not OFFSET. */
+export async function loadMoreRecordHistoryQuery(
+  entityType: string,
+  entityId: string,
+  afterId: string,
+) {
+  const entries = await db.auditLog.findMany({
+    where: { entityType, entityId },
+    orderBy: { createdAt: 'desc' },
+    cursor: { id: afterId },
+    skip: 1,
+    take: RECORD_HISTORY_PAGE_SIZE + 1,
+  })
+
+  const hasMore = entries.length > RECORD_HISTORY_PAGE_SIZE
+  return { entries: entries.slice(0, RECORD_HISTORY_PAGE_SIZE), hasMore }
 }
 
 /** Whether this id's last audit entry for this model was a DELETE — used

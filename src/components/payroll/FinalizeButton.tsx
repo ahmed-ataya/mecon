@@ -3,6 +3,7 @@
 import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { buttonPrimaryClass, buttonSecondaryClass } from '@/components/ui/form'
+import { useConfirmDialog } from '@/components/ui/ConfirmDialog'
 
 /** Same idea as timesheets' SignButton — finalizing locks every payslip in
  * the period (DailyRowsTable-style edit forms disable once locked). */
@@ -17,11 +18,12 @@ export function FinalizeButton({
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const { confirm, dialog } = useConfirmDialog()
 
-  function handleClick() {
+  async function handleClick() {
     if (
       finalized &&
-      !confirm('Unfinalize this payroll period? Payslips can be edited again once unfinalized.')
+      !(await confirm('Unfinalize this payroll period? Payslips can be edited again once unfinalized.'))
     ) {
       return
     }
@@ -33,13 +35,16 @@ export function FinalizeButton({
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={isPending}
-      className={finalized ? buttonSecondaryClass : buttonPrimaryClass}
-    >
-      {isPending ? 'Working…' : finalized ? 'Unfinalize' : 'Finalize'}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={isPending}
+        className={finalized ? buttonSecondaryClass : buttonPrimaryClass}
+      >
+        {isPending ? 'Working…' : finalized ? 'Unfinalize' : 'Finalize'}
+      </button>
+      {dialog}
+    </>
   )
 }
