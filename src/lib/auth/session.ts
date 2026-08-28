@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import { cache } from 'react'
 import { cookies } from 'next/headers'
 import { db } from '../db'
 import type { UserRole } from '../enums'
@@ -40,8 +41,18 @@ export async function createSession(userId: string): Promise<void> {
  * trusting anything proxy.ts may have already checked — Next's own guidance
  * is explicit that proxy is a first line of defense, not a substitute for
  * checking inside each Server Function. See src/proxy.ts's comment.
+ *
+ * Wrapped in React's `cache()` (request memoization, not a cross-request
+ * cache — it's cleared automatically once the request finishes): the
+ * layout calls this once for the sidebar, then nearly every page's own
+ * guard (requirePageUser, requireAdminPage, ...) calls it again, and a
+ * mutating action's requireWrite()/requireDelete() calls it again after
+ * that. Before this, that meant 2-4 identical session lookups hitting the
+ * database on a single page load, all resolving the same token to the
+ * same user. Real, measured impact: see ROADMAP.md's performance
+ * investigation, 2026-08-28.
  */
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const cookieStore = await cookies()
   const token = cookieStore.get(COOKIE_NAME)?.value
   if (!token) return null
@@ -64,7 +75,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     email: session.user.email,
     role: session.user.role as UserRole,
   }
-}
+})
 
 export async function destroySession(): Promise<void> {
   const cookieStore = await cookies()
