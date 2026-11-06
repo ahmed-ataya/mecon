@@ -160,9 +160,13 @@ export default async function OperatorsPage({
                       >
                         {operator.name}
                       </Link>
-                      {operator.employeeNumber && (
+                      {operator.employeeNumber ? (
                         <div className="text-xs text-slate-500">
                           #{operator.employeeNumber}
+                        </div>
+                      ) : (
+                        <div className="mt-1 inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
+                          No staff number
                         </div>
                       )}
                     </td>

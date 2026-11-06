@@ -129,7 +129,11 @@ export default async function OperatorDetailPage({
       <section className="rounded-lg border border-slate-200 bg-white p-6">
         <h2 className="mb-4 font-semibold">Details</h2>
         <dl className="grid gap-4 text-sm sm:grid-cols-2">
-          <Detail label="Employee number" value={operator.employeeNumber} />
+          <Detail
+            label="Employee number"
+            value={operator.employeeNumber}
+            flagWhenEmpty="Missing staff number"
+          />
           <Detail label="Job title" value={operator.jobTitle} />
           <Detail label="Category" value={categoryLabel} />
           <Detail label="Source" value={sourceLabel} />
@@ -244,11 +248,35 @@ export default async function OperatorDetailPage({
   )
 }
 
-function Detail({ label, value }: { label: string; value: string | null }) {
+function Detail({
+  label,
+  value,
+  flagWhenEmpty,
+}: {
+  label: string
+  value: string | null
+  /**
+   * Shown in place of the em dash when the value is empty. Only for fields
+   * whose absence is a data gap worth chasing rather than a legitimate
+   * blank — an em dash reads as "not applicable", which is the wrong
+   * message for a missing staff number.
+   */
+  flagWhenEmpty?: string
+}) {
   return (
     <div>
       <dt className="text-xs uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-0.5 text-slate-900">{value || '—'}</dd>
+      <dd className="mt-0.5 text-slate-900">
+        {value ? (
+          value
+        ) : flagWhenEmpty ? (
+          <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
+            {flagWhenEmpty}
+          </span>
+        ) : (
+          '—'
+        )}
+      </dd>
     </div>
   )
 }
