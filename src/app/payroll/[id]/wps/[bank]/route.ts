@@ -3,7 +3,7 @@ import { getCurrentUser } from '@/lib/auth/session'
 import { canViewPayroll } from '@/lib/permissions'
 import { loadPayrollPeriodForWps } from '@/lib/payroll-queries'
 import { BANKS, type Bank } from '@/lib/enums'
-import { generateCbqSif, isWpsBankConfigured, validateEmployeesForWps } from '@/lib/wps'
+import { generateSif, wpsBankReadiness, validateEmployeesForWps } from '@/lib/wps'
 
 export async function GET(
   _request: Request,
@@ -20,10 +20,19 @@ export async function GET(
   }
   const bank = bankParam as Bank
 
-  if (!isWpsBankConfigured(bank)) {
+  const readiness = wpsBankReadiness(bank)
+  if (readiness === 'NO_LAYOUT') {
     return new NextResponse(`${bank}'s SIF field layout isn't configured yet.`, {
       status: 400,
     })
+  }
+  if (readiness === 'NEEDS_PAYER_DETAILS') {
+    return new NextResponse(
+      `${bank}'s file layout is built, but the company's own ${bank} establishment ` +
+        `number and account IBAN haven't been entered yet — see WPS_PAYER_CONFIG ` +
+        `in src/lib/wps.ts.`,
+      { status: 400 },
+    )
   }
 
   const period = await loadPayrollPeriodForWps(id)
@@ -47,13 +56,8 @@ export async function GET(
     )
   }
 
-  // Only CBQ is wired up below (generateCbqSif) — the `if` guards against a
-  // second bank being added to BANKS before its own generator exists.
-  if (bank !== 'CBQ') {
-    return new NextResponse(`${bank}'s export isn't built yet.`, { status: 501 })
-  }
-
-  const { filename, content } = generateCbqSif({
+  const { filename, content } = generateSif({
+    bank,
     payslips,
     year: period.year,
     month: period.month,

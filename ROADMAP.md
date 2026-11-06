@@ -955,12 +955,12 @@ instruction not to guess.
   reproduced in this doc or anywhere else; only the company's own payer
   details (Employer QID, Payer IBAN) were kept, the same way `COMPANY`'s
   own invoice letterhead details already are.
-- **QNB — not started.** No sample file yet; `WPS_PAYER_CONFIG` has no QNB
-  entry, and the export page shows "Field layout not yet configured" for
-  it rather than guessing. Confirmed with the user: build CBQ now (covers
-  the great majority of staff), add QNB once its file arrives — no rework
-  needed, it's a second entry in the same config plus a second generator
-  function alongside `generateCbqSif`.
+- **QNB — layout built 2026-09-26, see Phase F2 below.** Was blocked on a
+  sample file; a real QNB SIF file turned out to be available, so the
+  layout is no longer a guess. What remains is a data-entry job, not a
+  build job: the company's own QNB establishment number and account IBAN.
+  The export page now says so explicitly instead of "Field layout not yet
+  configured".
 - **Pre-submission validation, built**: blocks export per bank with a
   named list of what's missing — no bank assigned, no IBAN, or no valid
   (non-expired) Qatar ID/Visa-Residence-Permit document — rather than
@@ -1225,7 +1225,8 @@ most.
 
 - **End of service gratuity** — accrued liability per employee (E4, above).
 - **WPS** — payroll must export in the bank's required SIF format. CBQ
-  done (Phase F); QNB still needs its own sample file.
+  done (Phase F); QNB layout done (Phase F2), pending the company's own
+  QNB establishment number and account IBAN.
 - **Residence permit / QID expiry** — hard compliance item, same alerting
   tier as other documents, escalated harder (E1).
 - **Annual leave entitlement** under Qatar Labour Law, and how the company
@@ -1283,7 +1284,143 @@ most.
     payroll lockdown, audit trail and user management are done; UI-level
     button-hiding is only partially rolled out across the app. Not fully
     resolved — see Phase F for exactly what's left.
-13. *(Raised 2026-08-21, CBQ built 2026-08-22)* **WPS export, per-bank.**
-    CBQ done and verified against a real sample SIF file. **QNB still
-    blocked** — no sample file received yet; do not guess at its layout.
-    See Phase F.
+13. *(Raised 2026-08-21, CBQ built 2026-08-22, QNB built 2026-09-26)*
+    ~~WPS export, per-bank~~ — both layouts now built from real sample
+    files, neither guessed. Not fully closed: QNB needs the company's own
+    establishment number and account IBAN entered before it can produce a
+    file. See **Phase F** and **Phase F2**.
+
+---
+
+## PHASE F2 — QNB WPS export ✅ Done (2026-09-26)
+
+Closes the one thing Phase F left explicitly blocked. Unblocked by a real
+QNB SIF file turning out to be available after all, so the layout is
+transcribed rather than guessed — the same standard CBQ was held to.
+
+**Provenance, stated plainly because it matters.** The QNB sample belongs
+to a **different employer** and is dated **August 2022**. Only its column
+layout was taken from it — the header labels, the field order and three
+formatting conventions. None of its contents were read into anything, and
+none appear in this document or in code. Two consequences follow, and
+both were accepted deliberately by the owner rather than treated as
+blockers: the layout is real but **unverified for this employer**, and it
+is **four years old**, so QNB may have changed the format since. The
+instruction was to build it and let the business flag a mismatch if the
+bank rejects the file, which is a better position than staying blocked
+indefinitely.
+
+**Each bank's layout is now data, not code.** `src/lib/wps.ts` grew a
+`WPS_LAYOUTS` table holding both banks' header rows verbatim plus their
+formatting quirks, and the two near-identical generators collapsed into
+one `generateSif({ bank, ... })`. The reason is that the two layouts differ
+almost entirely in **header label casing**, and a parser at a bank may
+well be strict about exactly that:
+
+| | CBQ | QNB |
+|---|---|---|
+| Employer column | `Employer QID` | `Employer EID` |
+| Payer bank column | `Payer Bank Short` | `Payer Bank Short Name` |
+| Record count column | `Total Records` | `Total records` |
+| Employee bank column | `Employee Bank Short name` | `Employee Bank Short Name` |
+| Working days column | `Number of Working days` | `Number of Working Days` |
+| Overtime column | `Extra Hours` | `Extra hours` |
+| Extra pay column | `Extra income` | `Extra Income` |
+| Notes column | `Note / Comments` | `Notes / Comments` |
+| Record Sequence | zero-padded to 5 | zero-padded to 6 |
+| Total records value | zero-padded to 5 | plain count, not padded |
+| Payment Type value | empty | `Normal Payment` |
+
+Eight of those eleven differences are pure casing or pluralisation. Kept
+as two separate literal arrays on purpose — a shared array with per-bank
+overrides would have hidden precisely the detail that's most likely to
+break.
+
+**"Not configured" split into two distinct states.** Until now, "we don't
+know this bank's file layout" and "we don't know our own account number"
+were indistinguishable — one boolean covered both, which was fine while
+they were the same problem and is wrong now. `wpsBankReadiness(bank)`
+returns `READY`, `NEEDS_PAYER_DETAILS` or `NO_LAYOUT`, and the export page
+tells the truth for each: QNB now reads *"File layout is ready — still
+needs the company's own QNB establishment number and account IBAN"*
+instead of implying the build isn't done.
+
+**What's still needed for QNB to produce a file** — both go in
+`WPS_PAYER_CONFIG.QNB`, no code changes:
+
+1. **The company's QNB account IBAN.** Genuinely unknown.
+2. **The establishment number.** Very likely the same `12943300` already
+   used for CBQ, since it's the company's Ministry of Labour number rather
+   than anything bank-specific — but *confirm rather than assume*, because
+   a wrong number here means a rejected file.
+
+**Verified structurally, not just compiled.** Generated both banks' files
+from synthetic payslips and compared each against its own real sample:
+payer header row, employee header row and both row widths match column for
+column, for both banks. Also asserted `Basic + Extra income − Deductions =
+Net Salary` on every generated row — true by construction, now actually
+checked. CBQ's output format is unchanged by the refactor (still 5-wide
+sequence, 5-wide padded total, empty Payment Type). The check was a
+throwaway script, not kept: there is still no test framework in this
+project, which stays the honest gap it has been since Phase A.
+
+---
+
+## Employee salary data — the gap behind payroll producing nothing
+
+Raised by the owner on 2026-09-25: *"why do we not have salaries, I
+provided you with the document previously."* Worth recording in full,
+because it explains an otherwise baffling symptom and because part of the
+answer is a judgment call I made and should own.
+
+**The symptom.** A payroll period finalized in production with **zero
+payslips**. Not a bug: `generatePayslipsForPeriod` selects employees
+`where: { basicSalary: { not: null } }` and deliberately skips anyone
+without a basic salary rather than zero-filling them
+(`src/lib/actions/payroll.ts`). With nobody having a salary, it correctly
+skipped everybody.
+
+**Why nobody has one.** Two separate reasons, and both are true:
+
+1. **The staff list genuinely had no pay in it.** The roster imported on
+   2026-08-18 (`scripts/import-employees.ts`) came from a spreadsheet with
+   exactly four columns — serial number, staff number, name, designation.
+   Everything on that sheet was imported. There was no salary column to
+   miss.
+2. **The CBQ SIF sample did have salaries, and I chose not to use them.**
+   It carries basic salary, extra income, deductions, net pay and bank
+   accounts for 49 people. I treated it strictly as a **format
+   specification** because the instruction was to treat its contents as
+   sensitive, and never considered it as a data source. That was my call,
+   it was never flagged at the time, and it is the actual reason the
+   numbers aren't in the system.
+
+**Why importing from that CBQ file anyway is the wrong fix.** Two
+independent problems:
+
+- **No key to join on.** The bank file identifies people by Qatar ID; the
+  roster identifies them by staff number. Neither file carries both, and
+  `Employee` has no QID field — QIDs live in `Document` records. Matching
+  on name spelling gives 23 exact matches out of 49, 12 loose matches
+  needing a human eye, and **14 that don't match at all** (transliteration
+  varies enough that some share no words with any roster name). A
+  mis-pairing puts one man's salary on another man's record. Not a risk
+  worth taking with wages.
+- **The allowance breakdown isn't in it.** The bank file has basic salary,
+  one lump "extra income" and deductions. `Employee` stores housing,
+  transport, food, site and other allowances separately, because
+  `checkMinimumWage` tests them against the Qatari statutory floors (QAR
+  500 housing, QAR 300 food, unless provided in kind). Imported from the
+  bank file, every employee would come up flagged short on housing and
+  food — not because they are, but because the split isn't there to read.
+
+**Decision: ask the business for one spreadsheet instead**, keyed on
+**staff number** (the business's own unambiguous identifier), carrying
+basic salary; housing / transport / food / site / other allowance split
+out; whether housing and food are provided in kind (likely yes for
+camp-based staff — `housingProvidedInKind` and `foodProvidedInKind` exist
+for exactly this); bank name and IBAN or wage card number; and date of
+joining, which is empty for all 50 and is required by both leave
+entitlement and E4 gratuity. Keyed that way it imports with no guessing.
+The import script is not written yet — waiting on the file, deliberately,
+rather than building against an assumed shape.

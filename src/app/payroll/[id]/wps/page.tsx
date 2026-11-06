@@ -4,7 +4,7 @@ import { monthLabel } from '@/lib/timesheet'
 import { loadPayrollPeriodForWps } from '@/lib/payroll-queries'
 import { requirePayrollPage } from '@/lib/auth/guard'
 import { BANKS, BANK_LABELS, type Bank } from '@/lib/enums'
-import { isWpsBankConfigured, validateEmployeesForWps } from '@/lib/wps'
+import { wpsBankReadiness, validateEmployeesForWps } from '@/lib/wps'
 import { buttonPrimaryClass } from '@/components/ui/form'
 
 export default async function WpsExportPage({
@@ -25,7 +25,7 @@ export default async function WpsExportPage({
   const byBank = BANKS.map((bank) => {
     const payslips = period.payslips.filter((p) => p.employee.bankName === bank)
     const issues = validateEmployeesForWps(payslips.map((p) => p.employee))
-    return { bank, payslips, issues }
+    return { bank, payslips, issues, readiness: wpsBankReadiness(bank) }
   })
 
   return (
@@ -64,7 +64,7 @@ export default async function WpsExportPage({
         </div>
       )}
 
-      {byBank.map(({ bank, payslips, issues }) => (
+      {byBank.map(({ bank, payslips, issues, readiness }) => (
         <section
           key={bank}
           className="rounded-lg border border-slate-200 bg-white p-6"
@@ -77,7 +77,7 @@ export default async function WpsExportPage({
               </p>
             </div>
 
-            {isWpsBankConfigured(bank) ? (
+            {readiness === 'READY' ? (
               payslips.length > 0 && issues.length === 0 ? (
                 <a
                   href={`/payroll/${id}/wps/${bank}`}
@@ -90,6 +90,11 @@ export default async function WpsExportPage({
                   Blocked — fix the issues below
                 </span>
               ) : null
+            ) : readiness === 'NEEDS_PAYER_DETAILS' ? (
+              <span className="max-w-xs text-right text-sm text-amber-700">
+                File layout is ready — still needs the company&rsquo;s own{' '}
+                {bank} establishment number and account IBAN
+              </span>
             ) : (
               <span className="text-sm text-slate-400">
                 Field layout not yet configured

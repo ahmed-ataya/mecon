@@ -170,3 +170,38 @@ a missed dropdown.
   Invoices list's Drafts tab) — a completely different mechanism from the
   above despite the shared word. Don't assume contract drafts work the way
   invoice drafts do, or vice versa.
+
+## WPS bank files (payroll → bank SIF export)
+
+- **Both banks' layouts**: `src/lib/wps.ts`, in the `WPS_LAYOUTS` table —
+  each bank's two header rows held **verbatim, casing included**, plus three
+  formatting conventions (Record Sequence padding width, whether Total
+  Records is zero-padded, and the literal Payment Type value). Both were
+  transcribed from a real sample file, never guessed. Do not "tidy" the
+  header strings: CBQ and QNB genuinely disagree on things like `Total
+  Records` vs `Total records`, and a bank's parser may be strict about it.
+- **The company's own bank identity**: `WPS_PAYER_CONFIG` in the same file —
+  establishment number, payer EID, payer IBAN, bank short code, per bank.
+  CBQ is filled in. **QNB is deliberately absent**: its layout is built, but
+  the company's own QNB IBAN (and confirmation of the establishment number)
+  hasn't been supplied. Adding that entry is all that's needed — no code.
+- **Which state a bank is in**: `wpsBankReadiness(bank)` → `READY`,
+  `NEEDS_PAYER_DETAILS` or `NO_LAYOUT`. Use this rather than testing
+  `WPS_PAYER_CONFIG[bank]` directly, so the UI keeps distinguishing "we
+  don't know the file format" from "we don't know our own account number".
+- **File generation**: one function for all banks, `generateSif({ bank, ... })`.
+  There is no per-bank generator function any more — the differences live in
+  the layout table.
+- **Pre-flight checks**: `validateEmployeesForWps` blocks the download and
+  names who is missing what (no bank assigned / no IBAN / no valid QID or
+  Visa-Residence-Permit). Document validity reuses `getDocumentStatus`, so it
+  can never disagree with what an employee's Documents tab shows.
+- **Where it surfaces**: `src/app/payroll/[id]/wps/page.tsx` (one section per
+  bank, with the blocking list) and `src/app/payroll/[id]/wps/[bank]/route.ts`
+  (the actual download; re-checks permissions, readiness and validation
+  server-side rather than trusting the page).
+- **Why the amounts always reconcile**: Extra income folds in overtime pay
+  plus every allowance, Deductions folds in both the minimum-wage shortfall
+  and the flat deduction — so `Basic + Extra − Deductions = Net` holds on
+  every row by construction. Neither real sample file reconciles that
+  cleanly; ours does.
