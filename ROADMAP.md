@@ -1424,3 +1424,106 @@ joining, which is empty for all 50 and is required by both leave
 entitlement and E4 gratuity. Keyed that way it imports with no guessing.
 The import script is not written yet — waiting on the file, deliberately,
 rather than building against an assumed shape.
+
+---
+
+## Staff list merged onto the live records ✅ Done (2026-11-06)
+
+Closes the gap found on 2026-10-03: the staff list supplied 2026-08-18 had
+been imported into the **development** database only, while the live system
+carried 28 records entered by hand by Muhideen — all filed as OPERATOR, all
+with `employeeNumber` blank, eleven with the staff number written inside
+the NAME ("LATIF GUL (5454)").
+
+`scripts/merge-staff-list.ts`, run with `--apply` against production by the
+owner. **27 of 28 records updated**: staff number moved out of the name into
+its own field, job title filled in from the spreadsheet, four misspellings
+corrected. Verified afterwards — 27 with a staff number, 27 with a job
+title, **zero** still carrying a number inside the name, and the document
+count unchanged at 252 (149 on employees, 103 on equipment). No record was
+created or deleted; deletions ever recorded is still 0.
+
+The hand-entered records were treated as the authoritative side and merged
+INTO, never replaced — they hold the phone numbers, nationalities, notes,
+in-house/market flag, 149 documents and 14 job assignments, none of which
+is on the spreadsheet. (An earlier note in this session put the employee
+document count at 141; that was an arithmetic slip — it was 149 all along.)
+
+Owner's rules, applied as given: the spreadsheet wins on spelling; longer
+names already on the record are kept, since a fuller name is not a
+misspelling; a staff number written into a name moves to its proper field.
+
+**Shehzad Khan Sultan Muhannad** is on the live system (3 documents, 1 job
+assignment) but not on the spreadsheet, so he was left entirely untouched
+and keeps the "Missing staff number" flag until the business supplies one.
+
+**Job title vs. "Qualified to operate".** The spreadsheet's DESIGNATION
+column holds the machine name for operators ("Backhoe Loader"), which is
+the business's own word for the role and is what went into `jobTitle`. It
+is not the same as `OperatorQualification`, the separate list of machines
+a man is cleared to run — which is empty for all 28 and is not decoration:
+it drives which machine-specific certificates `computeCompleteness`
+demands. With it empty, nobody is currently asked for any machine
+certificate. Not filled from the spreadsheet, because one designation per
+man probably understates what each can operate; left for the owner to
+decide whether to seed it as a baseline or have Muhideen set it.
+
+**Next, agreed with the owner**: add the 23 people who are on the
+spreadsheet but absent from the live system — all 12 workshop staff, 4
+office, 2 management, 2 drivers, 3 helpers. The merge script never creates
+anyone by design, so this needs its own pass. The point is to spare
+Muhideen 23 records of manual entry.
+
+### Correction: the CBQ file IS usable as a salary source
+
+On 2026-10-03 this document recorded that salaries could not be imported
+from the CBQ SIF sample because there was "no key to join on" — the file
+identifies people by Qatar ID and `Employee` has no QID field, so only name
+matching was left, which was correctly judged too risky for wages.
+
+**That conclusion was wrong.** `Employee` has no QID field, but the QID is
+recorded on every employee as a `Document` of type "Qatar ID" with its
+`documentNumber` filled in — all 28 of them. That is an exact key, a
+government ID number rather than a name with three spellings.
+
+Measured against production on 2026-11-06: **24 of the 28 live employees
+match a row in the CBQ file by Qatar ID**, and all 24 of those rows carry
+both a basic salary and a bank account number — enough to make payroll
+produce real payslips instead of an empty file.
+
+The genuine limitation stands and is smaller than it looked: the bank file
+carries basic salary, one lump "extra income" and deductions, but **not**
+the housing / transport / food / site split that `checkMinimumWage` tests
+against the statutory floors (QAR 500 housing, QAR 300 food unless provided
+in kind). Imported as-is, every employee would show short on housing and
+food — not because they are, but because the split isn't in the file. Four
+of the 28 have no row in it at all.
+
+Sequence agreed: merge (done) → add the missing 23 → import salaries and
+bank accounts for the 24 matched by QID → ask the business only for what is
+genuinely missing (the allowance split, joining dates, and the four people
+absent from the bank file). That reduces a long data-entry request to one
+short question.
+
+Sensitive handling unchanged: the CBQ sample's contents are never
+reproduced in this document, in code, or in chat — only counts.
+
+**Decision (owner, 2026-11-09): housing and food are assumed provided in
+kind for every employee.** When salaries are imported, every employee —
+the 28 existing and the 23 being added — gets `housingProvidedInKind` and
+`foodProvidedInKind` set to true. Muhideen then switches it off for
+anyone who is actually paid those allowances in cash.
+
+This reverses the schema's original default. `Employee` defaults both
+flags to false on purpose — the stricter check, "per owner confirmation
+rather than assumed". The owner has now confirmed the opposite default,
+which matches the reality for camp-based staff and stops every payslip
+being flagged short on housing and food simply because the bank file has
+no allowance split.
+
+The trade-off, stated so it isn't lost: with the flag on,
+`checkMinimumWage` no longer tests that person's housing and food
+allowances against the statutory floors (QAR 500 / QAR 300). For anyone
+who is in fact paid those in cash below the floor, the system will stay
+silent — catching that now depends on Muhideen correcting the flag for
+the exceptions.
